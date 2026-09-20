@@ -33,8 +33,8 @@ is on, launchd also brings the app back if it ever crashes; quitting from
 the menu keeps it quit until the next login.
 
 If you download `Headroom.zip` from a release instead, open the app and
-tick Start at Login yourself. To build from a checkout, run `./install.sh`
-inside it (needs the Xcode command line tools).
+tick Start at Login yourself. To build from a checkout instead, run
+`make install` inside it (needs the Xcode command line tools).
 
 `./uninstall.sh` removes all of it.
 
@@ -55,7 +55,7 @@ tampered, downgraded, or swapped download is refused and the installed
 copy stays as it was.
 
 A copy built from a checkout has no signing team to hold an update to, so
-it does not update itself: pull and run `./install.sh` again.
+it does not update itself: pull and run `make install` again.
 
 To turn the background checks off (the menu item keeps working):
 

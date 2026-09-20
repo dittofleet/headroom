@@ -22,6 +22,11 @@ else
 endif
 	codesign --verify --strict $(APP)
 
+# Installs this build. It is ad-hoc signed, so unlike a release it does not
+# update itself: pull and run this again.
+install: app
+	./install.sh $(APP)
+
 zip: app
 	cd dist && rm -f Headroom.zip && ditto -c -k --keepParent Headroom.app Headroom.zip
 
@@ -35,4 +40,4 @@ icon:
 clean:
 	rm -rf .build dist
 
-.PHONY: app zip test icon clean
+.PHONY: app install zip test icon clean
