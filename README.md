@@ -22,6 +22,8 @@ It is a small native app with no dependencies: one Swift binary, about
 curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/install.sh | sh
 ```
 
+Releases are universal, signed with a Developer ID, and notarized.
+
 This puts `Headroom.app` in `~/Applications` and registers a LaunchAgent so
 it starts at login and comes back if it ever crashes. Quitting from the menu
 keeps it quit until the next login. To build from a checkout instead, run
