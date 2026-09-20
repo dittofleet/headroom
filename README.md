@@ -1,6 +1,6 @@
 # headroom
 
-Claude and Codex usage limits in the macOS menu bar, in a 130 KB download.
+A lightweight menu bar app for your Claude and Codex usage limits.
 
 <img src="docs/menu.png" width="270" alt="The headroom menu">
 
@@ -13,21 +13,9 @@ Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick
 means you are burning faster than the window refills.
 
-## Lightweight on purpose
-
-The whole point of headroom is to be small enough that it can't go wrong in
-interesting ways:
-
-- **130 KB to download, about 400 KB installed.** Smaller than the
-  screenshot above would be at full size.
-- **One native Swift binary, no dependencies.** No Electron, no web view, no
-  bundled runtime, no helper processes, no auto-updater. It links only
-  against frameworks macOS already ships.
-- **About 1,000 lines of code.** You can read all of it in one sitting.
-- **Nearly idle.** It wakes once a minute to keep the countdowns honest and
-  makes one small request per provider every 5 minutes.
-- **Nothing to set up.** No login flow, no settings, no account. It borrows
-  the sessions Claude Code and Codex already have.
+It is one small native binary with no dependencies: no Electron, no login
+flow, no settings. It borrows the sessions Claude Code and Codex already
+have and otherwise stays out of the way.
 
 ## Install
 
