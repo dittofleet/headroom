@@ -7,7 +7,7 @@ import HeadroomCore
 enum Render {
     static func png(engine: Engine, to url: URL, dark: Bool, now: Date = Date()) throws {
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
-        let views = menuViews(engine: engine, now: now)
+        let views = menuViews(engine: engine, now: now).flatMap { $0 }
         let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now))
 
         let barHeight: CGFloat = 24, padding: CGFloat = 6

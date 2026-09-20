@@ -141,11 +141,36 @@ private struct StubProvider: Provider {
     #expect(engine.state(provider).lastError == "Rate limited")
 }
 
+@Test func providerStateLoadsFromOtherVersions() throws {
+    let old = #"{"claude": {"nextFetchAt": 5, "throttledUntil": 9, "someFutureKey": true}, "codex": {}}"#
+    let states = try JSONDecoder().decode([String: ProviderState].self, from: Data(old.utf8))
+    #expect(states["claude"]?.throttledUntil == Date(timeIntervalSinceReferenceDate: 9))
+    #expect(states["codex"]?.nextFetchAt == .distantPast)
+
+    var state = ProviderState()
+    state.snapshot = Snapshot(limits: [Limit(kind: .weekly, label: "Weekly", percent: 5, resetsAt: now, windowSeconds: 1)], plan: "Max", fetchedAt: now)
+    state.lastError = "Offline"
+    let decoded = try JSONDecoder().decode(ProviderState.self, from: JSONEncoder().encode(state))
+    #expect(decoded.snapshot == state.snapshot && decoded.lastError == "Offline")
+}
+
+@MainActor @Test func engineNeverPollsFasterThanTheFloor() {
+    let provider = StubProvider()
+    let engine = Engine(providers: [provider], cacheFile: nil)
+    // A reset that is always moments away, or already behind us mid-fetch.
+    for offset in [5.0, -1.0] {
+        let snapshot = Snapshot(limits: [Limit(kind: .other, label: "Odd", percent: 1, resetsAt: now.addingTimeInterval(offset), windowSeconds: 60)], plan: nil, fetchedAt: now.addingTimeInterval(-2))
+        engine.apply(.success(snapshot), to: provider, now: now)
+        #expect(!engine.isDue(provider, manual: false, now: now.addingTimeInterval(60)))
+        #expect(engine.isDue(provider, manual: false, now: now.addingTimeInterval(121)))
+    }
+}
+
 @MainActor @Test func engineRefetchesWhenAWindowRollsOver() {
     let provider = StubProvider()
     let engine = Engine(providers: [provider], cacheFile: nil)
-    let snapshot = Snapshot(limits: [Limit(kind: .session, label: "Session", percent: 10, resetsAt: now.addingTimeInterval(100), windowSeconds: 18000)], plan: nil, fetchedAt: now)
+    let snapshot = Snapshot(limits: [Limit(kind: .session, label: "Session", percent: 10, resetsAt: now.addingTimeInterval(200), windowSeconds: 18000)], plan: nil, fetchedAt: now)
     engine.apply(.success(snapshot), to: provider, now: now)
-    #expect(!engine.isDue(provider, manual: false, now: now.addingTimeInterval(90)))
-    #expect(engine.isDue(provider, manual: false, now: now.addingTimeInterval(120)))
+    #expect(!engine.isDue(provider, manual: false, now: now.addingTimeInterval(210)))
+    #expect(engine.isDue(provider, manual: false, now: now.addingTimeInterval(216)))
 }

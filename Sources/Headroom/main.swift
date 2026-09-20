@@ -69,14 +69,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildMenu(now: Date) {
         menu.removeAllItems()
-        for view in menuViews(engine: engine, now: now) {
-            // Each provider starts with its heading; rule them apart.
-            if view is HeaderView, !menu.items.isEmpty { menu.addItem(.separator()) }
-            let item = NSMenuItem()
-            item.view = view
-            menu.addItem(item)
+        for group in menuViews(engine: engine, now: now) {
+            for view in group {
+                let item = NSMenuItem()
+                item.view = view
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
         }
-        menu.addItem(.separator())
 
         menu.addItem(actionItem("Refresh Now", #selector(refreshNow), key: "r"))
         for (index, provider) in engine.providers.enumerated() {
@@ -156,7 +156,7 @@ MainActor.assumeIsolated {
     let cacheFile = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
         .appendingPathComponent("headroom/state.json")
 
-    if let index = arguments.firstIndex(of: "--render"), let path = arguments[(index + 1)...].first {
+    if let index = arguments.firstIndex(of: "--render"), let path = arguments.dropFirst(index + 1).first {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.
         let engine = Engine(providers: providers, cacheFile: cacheFile)
         do {

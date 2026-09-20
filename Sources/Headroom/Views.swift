@@ -44,7 +44,7 @@ enum StatusIcon {
         let rowHeight: CGFloat = rows.count > 1 ? 10 : 14
         let fontSize: CGFloat = rows.count > 1 ? 9 : 11
         let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, numberWidth: CGFloat = fontSize * 2.1
-        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth, height: rowHeight * CGFloat(rows.count))
+        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
 
         let image = NSImage(size: size, flipped: false) { _ in
@@ -62,7 +62,7 @@ enum StatusIcon {
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
-                drawBar(in: track, percent: row.percent ?? 0, track: color.withAlphaComponent(0.25 * alpha), fill: color.withAlphaComponent(alpha))
+                drawBar(in: track, percent: row.percent ?? 0, track: color.withAlphaComponent(0.25 * alpha), fill: color.withAlphaComponent(alpha), minFill: 2)
 
                 let text = row.percent.map { "\(Format.wholePercent($0))" } ?? "–"
                 let number = NSAttributedString(string: text, attributes: attributes)
@@ -78,22 +78,22 @@ enum StatusIcon {
 }
 
 /// A rounded track with a fill that never shrinks below a visible nub.
-private func drawBar(in track: NSRect, percent: Double, track trackColor: NSColor, fill fillColor: NSColor) {
+private func drawBar(in track: NSRect, percent: Double, track trackColor: NSColor, fill fillColor: NSColor, minFill: CGFloat? = nil) {
     let radius = track.height / 2
     trackColor.setFill()
     NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
     guard percent > 0 else { return }
     var fill = track
-    fill.size.width = max(track.width * percent / 100, track.height)
+    fill.size.width = max(track.width * percent / 100, minFill ?? track.height)
     fillColor.setFill()
     NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
 }
 
-/// Everything the menu shows above its actions: per provider a heading, its
-/// limits, and the reason when the last refresh failed.
+/// Everything the menu shows above its actions, one group per provider: a
+/// heading, its limits, and the reason when the last refresh failed.
 @MainActor
-func menuViews(engine: Engine, now: Date) -> [NSView] {
-    engine.providers.flatMap { provider -> [NSView] in
+func menuViews(engine: Engine, now: Date) -> [[NSView]] {
+    engine.providers.map { provider -> [NSView] in
         let state = engine.state(provider)
         let fetching = engine.isFetching(provider)
         let stale = state.snapshot?.isStale(at: now) ?? true
@@ -111,6 +111,8 @@ func menuViews(engine: Engine, now: Date) -> [NSView] {
 
 /// Why the numbers above it are not fresh. Wraps, since reasons run long.
 final class NoticeView: NSView {
+    // Measured and drawn with the same options, or the last line clips.
+    private static let drawing: NSString.DrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
     private let text: NSAttributedString
 
     init(text: String) {
@@ -118,14 +120,14 @@ final class NoticeView: NSView {
             .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.systemOrange,
         ])
         let width = MenuMetrics.width - MenuMetrics.inset * 2
-        let height = ceil(self.text.boundingRect(with: NSSize(width: width, height: 200), options: .usesLineFragmentOrigin).height)
-        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: height + 8))
+        let height = ceil(self.text.boundingRect(with: NSSize(width: width, height: 200), options: Self.drawing).height)
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: height + 10))
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
-        text.draw(with: bounds.insetBy(dx: MenuMetrics.inset, dy: 4), options: .usesLineFragmentOrigin)
+        text.draw(with: bounds.insetBy(dx: MenuMetrics.inset, dy: 4), options: Self.drawing)
     }
 }
 

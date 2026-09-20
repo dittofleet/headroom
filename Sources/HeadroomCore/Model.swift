@@ -99,7 +99,16 @@ public struct ProviderState: Codable, Sendable {
     /// Server-mandated cooldown. Unlike `nextFetchAt`, this also blocks
     /// manual refreshes.
     public var throttledUntil: Date = .distantPast
-    public var lastAttemptAt: Date = .distantPast
 
     public init() {}
+
+    /// Tolerates missing keys, so a cache written by another version still
+    /// loads: losing it would also lose a server cooldown.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        snapshot = try? values.decodeIfPresent(Snapshot.self, forKey: .snapshot)
+        lastError = try? values.decodeIfPresent(String.self, forKey: .lastError)
+        nextFetchAt = (try? values.decodeIfPresent(Date.self, forKey: .nextFetchAt)) ?? .distantPast
+        throttledUntil = (try? values.decodeIfPresent(Date.self, forKey: .throttledUntil)) ?? .distantPast
+    }
 }

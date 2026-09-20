@@ -20,7 +20,7 @@ public struct ClaudeProvider: Provider {
         }
         // An expired token is a guaranteed 401 that still spends the
         // endpoint's small request quota.
-        if let expiresAt = creds.expiresAt, expiresAt <= Date() {
+        if !creds.isLive(at: Date()) {
             return .failure(FetchFailure("Token expired, \(Self.authAdvice)"))
         }
         let result = await HTTP.get(
@@ -95,6 +95,10 @@ public struct ClaudeProvider: Provider {
         var token: String
         var expiresAt: Date?
         var plan: String?
+
+        func isLive(at now: Date) -> Bool {
+            (expiresAt ?? .distantFuture) > now
+        }
     }
 
     static func parseCredentials(_ data: Data) -> Credentials? {
@@ -120,7 +124,7 @@ public struct ClaudeProvider: Provider {
         var expired: Credentials?
         func live(_ data: Data?) -> Credentials? {
             guard let creds = data.flatMap(parseCredentials) else { return nil }
-            if (creds.expiresAt ?? .distantFuture) > now { return creds }
+            if creds.isLive(at: now) { return creds }
             expired = expired ?? creds
             return nil
         }

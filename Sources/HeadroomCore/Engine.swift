@@ -21,6 +21,9 @@ public final class Engine {
 
     private let cacheFile: URL?
     private var inFlight: Set<String> = []
+    /// In memory only: the manual floor is about this process's behavior,
+    /// and a relaunch should not inherit it.
+    private var lastAttempt: [String: Date] = [:]
 
     public init(providers: [any Provider], cacheFile: URL?) {
         self.providers = providers
@@ -31,9 +34,6 @@ public final class Engine {
             states = saved
         }
         self.states = states
-        if let cacheFile {
-            try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-        }
     }
 
     public func state(_ provider: any Provider) -> ProviderState {
@@ -51,7 +51,7 @@ public final class Engine {
         for provider in providers where isDue(provider, manual: manual, now: now) {
             started = true
             inFlight.insert(provider.id)
-            states[provider.id, default: ProviderState()].lastAttemptAt = now
+            lastAttempt[provider.id] = now
             Task {
                 let result = await provider.fetch()
                 self.apply(result, to: provider)
@@ -63,7 +63,7 @@ public final class Engine {
     func isDue(_ provider: any Provider, manual: Bool, now: Date) -> Bool {
         let state = state(provider)
         if inFlight.contains(provider.id) || now < state.throttledUntil { return false }
-        if manual { return now.timeIntervalSince(state.lastAttemptAt) >= Self.manualInterval }
+        if manual { return now.timeIntervalSince(lastAttempt[provider.id] ?? .distantPast) >= Self.manualInterval }
         return now >= state.nextFetchAt
     }
 
@@ -74,10 +74,12 @@ public final class Engine {
             state.snapshot = snapshot
             state.lastError = nil
             // Refetch early when a window rolls over: past that point the
-            // number on screen is known to be wrong.
-            state.nextFetchAt = min(
-                now.addingTimeInterval(Self.refreshInterval),
-                snapshot.expiresAt?.addingTimeInterval(Self.rolloverGrace) ?? .distantFuture)
+            // number on screen is known to be wrong. Floored, so a reset
+            // that is always moments away can't turn into per-minute polling.
+            let rollover = snapshot.expiresAt?.addingTimeInterval(Self.rolloverGrace) ?? .distantFuture
+            state.nextFetchAt = max(
+                now.addingTimeInterval(Self.failureBackoff),
+                min(now.addingTimeInterval(Self.refreshInterval), rollover))
         case .failure(let failure):
             state.lastError = failure.message
             if let retryAfter = failure.retryAfter {
@@ -95,6 +97,8 @@ public final class Engine {
 
     private func save() {
         guard let cacheFile, let data = try? JSONEncoder().encode(states) else { return }
+        // Every time: macOS may purge Caches while we run.
+        try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: cacheFile, options: .atomic)
     }
 }
