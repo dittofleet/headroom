@@ -6,8 +6,20 @@ enum HTTP {
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
+        return URLSession(configuration: config, delegate: NoRedirects(), delegateQueue: nil)
     }()
+
+    /// Requests carry a bearer token, and URLSession would replay it to
+    /// wherever a redirect points. Neither endpoint redirects, so refuse:
+    /// the 3xx then surfaces as an ordinary HTTP failure.
+    private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            completionHandler(nil)
+        }
+    }
 
     /// GET returning the body on 200, or a failure that carries the server's
     /// retry-after when it sent one.
