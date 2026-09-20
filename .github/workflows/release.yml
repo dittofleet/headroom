@@ -96,6 +96,7 @@ jobs:
           rm dist/Headroom.zip
           ditto -c -k --keepParent dist/Headroom.app dist/Headroom.zip
 
+      # The asset name is what install.sh and the app's updater download.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

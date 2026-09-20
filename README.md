@@ -32,6 +32,29 @@ keeps it quit until the next login. To build from a checkout instead, run
 
 `./uninstall.sh` removes all of it.
 
+## Updates
+
+headroom keeps itself current. A few times a day it asks GitHub for the
+latest release, and when there is a newer one it downloads it, swaps it in,
+and restarts itself (never while the menu is open). "Check for Updates" in
+the menu does the same on demand.
+
+Because this app reads auth tokens, it will not install just anything the
+download URL returns. An update must be signed by the same Developer ID
+team as the copy already running, be notarized by Apple, carry headroom's
+bundle id, and be exactly the newer version that was asked for, so a
+tampered, downgraded, or swapped download is refused and the installed
+copy stays as it was.
+
+A copy built from a checkout has no signing team to hold an update to, so
+it does not update itself: pull and run `./install.sh` again.
+
+To turn automatic updates off (the menu item keeps working):
+
+```sh
+defaults write io.github.dittofleet.headroom autoUpdate -bool false
+```
+
 ## Where the numbers come from
 
 headroom has no login of its own. It borrows the sessions you already have:

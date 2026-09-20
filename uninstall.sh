@@ -7,4 +7,5 @@ DEST="${HEADROOM_INSTALL_DIR:-$HOME/Applications}"
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/$LABEL.plist"
 rm -rf "$DEST/Headroom.app" "$HOME/Library/Caches/headroom"
+defaults delete "$LABEL" 2>/dev/null || true
 echo "Removed Headroom." >&2

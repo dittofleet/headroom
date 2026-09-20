@@ -1,7 +1,7 @@
 import AppKit
 import HeadroomCore
 
-let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let menu = NSMenu()
     private var menuIsOpen = false
     private var iconRows: [StatusIcon.Row]?
+    private let updates = UpdateController()
 
     init(engine: Engine) {
         self.engine = engine
@@ -22,14 +23,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.autoenablesItems = false
 
         engine.onChange = { [weak self] in self?.render() }
+        updates.onChange = { [weak self] in self?.render() }
+        updates.canRelaunch = { [weak self] in self?.menuIsOpen != true }
         render()
         engine.refresh()
+        updates.tick()
 
         // One cheap tick a minute: it fetches only what is due, and keeps
         // countdowns and rolled-over windows honest in between.
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.engine.refresh()
+                self?.updates.tick()
                 self?.render()
             }
         }
@@ -85,6 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        let about = NSMenuItem(title: ["Headroom \(appVersion)", updates.status].compactMap { $0 }.joined(separator: " · "), action: nil, keyEquivalent: "")
+        about.isEnabled = false
+        menu.addItem(about)
+        if updates.canUpdate { menu.addItem(actionItem("Check for Updates", #selector(checkForUpdates))) }
         menu.addItem(actionItem("Quit Headroom", #selector(quit), key: "q"))
     }
 
@@ -106,10 +115,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) {
         menuIsOpen = false
+        updates.relaunchWhenIdle()
     }
 
     @objc private func refreshNow() {
         engine.refresh(manual: true)
+    }
+
+    @objc private func checkForUpdates() {
+        updates.check()
     }
 
     @objc private func openUsagePage(_ sender: NSMenuItem) {
@@ -127,7 +141,7 @@ let providers: [any Provider] = [ClaudeProvider(), CodexProvider()]
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 if arguments.contains("--version") {
-    print(version)
+    print(appVersion)
     exit(0)
 }
 
