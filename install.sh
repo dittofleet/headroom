@@ -4,12 +4,19 @@
 set -eu
 
 LABEL="io.github.dittofleet.headroom"
-DEST="${HEADROOM_INSTALL_DIR:-$HOME/Applications}"
+DEST="${HEADROOM_INSTALL_DIR:-/Applications}"
 APP="$DEST/Headroom.app"
 GUI_DOMAIN="gui/$(id -u)"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "headroom is a macOS menu bar app, got: $(uname -s)" >&2
+  exit 1
+fi
+
+mkdir -p "$DEST" 2>/dev/null || true
+if [ ! -w "$DEST" ]; then
+  echo "Cannot write to $DEST. Without an admin account, install into your home folder:" >&2
+  echo "  curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/install.sh | HEADROOM_INSTALL_DIR=~/Applications sh" >&2
   exit 1
 fi
 
@@ -26,8 +33,8 @@ else
 fi
 
 launchctl bootout "$GUI_DOMAIN/$LABEL" 2>/dev/null || true
-mkdir -p "$DEST"
-rm -rf "$APP"
+# Early versions installed into ~/Applications; don't leave a second copy.
+rm -rf "$APP" "$HOME/Applications/Headroom.app"
 ditto "$TMP/Headroom.app" "$APP"
 echo "Installed $APP" >&2
 

@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/install.sh
 
 Releases are universal, signed with a Developer ID, and notarized.
 
-This puts `Headroom.app` in `~/Applications`, starts it, and turns on
+This puts `Headroom.app` in `/Applications`, starts it, and turns on
 **Start at Login**. You can switch that off and on from the menu. While it
 is on, launchd also brings the app back if it ever crashes; quitting from
 the menu keeps it quit until the next login.
@@ -98,6 +98,6 @@ quota. So headroom:
 ## Diagnostics
 
 ```sh
-~/Applications/Headroom.app/Contents/MacOS/Headroom --print               # fetch once, print as text
-~/Applications/Headroom.app/Contents/MacOS/Headroom --render out.png      # draw the menu from cached state (--dark)
+/Applications/Headroom.app/Contents/MacOS/Headroom --print               # fetch once, print as text
+/Applications/Headroom.app/Contents/MacOS/Headroom --render out.png      # draw the menu from cached state (--dark)
 ```
