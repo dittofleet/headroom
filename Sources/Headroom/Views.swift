@@ -95,10 +95,62 @@ private func drawBar(in track: NSRect, percent: Double, track trackColor: NSColo
     NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
 }
 
+enum Preferences {
+    /// The pace tick on each bar. On unless switched off.
+    static var showPace: Bool {
+        get { UserDefaults.standard.object(forKey: "showPace") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "showPace") }
+    }
+}
+
+/// One line of the menu. The app turns these into NSMenuItems and --render
+/// draws them, so the two can't drift apart.
+enum MenuEntry {
+    case view(NSView)
+    case separator
+    case info(String, toolTip: String? = nil)
+    case action(title: String, selector: Selector, key: String = "", checked: Bool = false, tag: Int = 0)
+}
+
+/// The parts of the menu that don't come from the engine.
+struct MenuChrome {
+    var about: String
+    var aboutDetail: String?
+    var updateReady: Bool
+    var canUpdate: Bool
+    var startAtLogin: Bool
+    var showPace: Bool
+}
+
+@MainActor
+func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
+    var entries: [MenuEntry] = []
+    for group in menuViews(engine: engine, now: now, showPace: chrome.showPace) {
+        entries += group.map(MenuEntry.view)
+        entries.append(.separator)
+    }
+    entries.append(.action(title: "Refresh Now", selector: #selector(AppDelegate.refreshNow), key: "r"))
+    for (index, provider) in engine.providers.enumerated() {
+        entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
+    }
+    entries.append(.separator)
+    entries.append(.action(title: "Show Pace", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
+    entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
+    entries.append(.separator)
+    entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
+    if chrome.updateReady {
+        entries.append(.action(title: "Restart to Update", selector: #selector(AppDelegate.restartToUpdate)))
+    } else if chrome.canUpdate {
+        entries.append(.action(title: "Check for Updates", selector: #selector(AppDelegate.checkForUpdates)))
+    }
+    entries.append(.action(title: "Quit Headroom", selector: #selector(AppDelegate.quit), key: "q"))
+    return entries
+}
+
 /// Everything the menu shows above its actions, one group per provider: a
 /// heading, its limits, and the reason when the last refresh failed.
 @MainActor
-func menuViews(engine: Engine, now: Date) -> [[NSView]] {
+func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
     engine.providers.map { provider -> [NSView] in
         let state = engine.state(provider)
         let fetching = engine.isFetching(provider)
@@ -106,7 +158,7 @@ func menuViews(engine: Engine, now: Date) -> [[NSView]] {
         let detail = fetching ? "Updating…" : state.snapshot.map { Format.age($0.fetchedAt, now: now) } ?? "No data"
 
         var views: [NSView] = [HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, detailIsProblem: stale && !fetching)]
-        views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale) }
+        views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale, showPace: showPace) }
         if let error = state.lastError {
             let wait = state.nextFetchAt.timeIntervalSince(now)
             views.append(NoticeView(text: wait > 0 ? "\(error) · retry in \(Format.duration(wait))" : error))
@@ -173,11 +225,13 @@ final class LimitRowView: NSView {
     private let limit: Limit
     private let now: Date
     private let stale: Bool
+    private let showPace: Bool
 
-    init(limit: Limit, now: Date, stale: Bool) {
+    init(limit: Limit, now: Date, stale: Bool, showPace: Bool) {
         self.limit = limit
         self.now = now
         self.stale = stale
+        self.showPace = showPace
         super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 44))
     }
 
@@ -204,7 +258,7 @@ final class LimitRowView: NSView {
         drawBar(in: track, percent: percent, track: NSColor.labelColor.withAlphaComponent(0.12), fill: accent.withAlphaComponent(stale ? 0.5 : 1))
         // Pace tick: how far through the window we are. Fill past the tick
         // means usage is running ahead of the clock.
-        if let elapsed = limit.elapsedFraction(at: now) {
+        if showPace, let elapsed = limit.elapsedFraction(at: now) {
             let x = track.minX + track.width * elapsed
             NSColor.labelColor.withAlphaComponent(0.7).setFill()
             NSRect(x: x - 0.75, y: track.minY - 2, width: 1.5, height: track.height + 4).fill()

@@ -11,10 +11,11 @@ orange at 75% and red at 90%.
 
 Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick
-means you are burning faster than the window refills.
+means you are burning faster than the window refills. "Show Pace" in the menu
+hides the ticks if you would rather not see them.
 
-It does one thing and is simple about it: no login flow, no settings, no
-dependencies. It borrows the sessions Claude Code and Codex already have,
+It does one thing and is simple about it: no login flow, no dependencies,
+and two checkboxes for settings. It borrows the sessions Claude Code and Codex already have,
 shows you the numbers, and otherwise stays out of the way. Being a single
 small native binary is a side effect of that.
 

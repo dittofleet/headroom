@@ -21,8 +21,11 @@ final class UpdateController {
     /// Installed on disk and waiting for a restart.
     private(set) var installed: Version?
 
-    /// Shown in the menu next to the version.
+    /// Shown in the menu next to the version, so kept short: a long line
+    /// would stretch the menu wider than its fixed-width rows.
     private(set) var status: String?
+    /// The full reason behind a failed update, for the tooltip.
+    private(set) var detail: String?
     var onChange: (() -> Void)?
 
     init() {
@@ -63,14 +66,14 @@ final class UpdateController {
                     set(status: "Up to date")
                 }
             } catch {
-                set(status: "Update failed: \((error as? UpdateError)?.description ?? error.localizedDescription)")
+                set(status: "Update failed", detail: (error as? UpdateError)?.description ?? error.localizedDescription)
             }
             busy = false
         }
     }
 
-    private func set(status: String) {
-        self.status = status
+    private func set(status: String, detail: String? = nil) {
+        (self.status, self.detail) = (status, detail)
         onChange?()
     }
 

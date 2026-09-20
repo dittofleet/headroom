@@ -74,43 +74,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.joined(separator: ", ")
     }
 
+    var chrome: MenuChrome {
+        MenuChrome(
+            about: ["Headroom \(appVersion)", updates.status].compactMap { $0 }.joined(separator: " · "),
+            aboutDetail: updates.detail,
+            updateReady: updates.installed != nil,
+            canUpdate: updates.canUpdate,
+            startAtLogin: LoginItem.isEnabled,
+            showPace: Preferences.showPace
+        )
+    }
+
     private func buildMenu(now: Date) {
         menu.removeAllItems()
-        for group in menuViews(engine: engine, now: now) {
-            for view in group {
+        for entry in menuEntries(engine: engine, chrome: chrome, now: now) {
+            switch entry {
+            case .view(let view):
                 let item = NSMenuItem()
                 item.view = view
                 menu.addItem(item)
+            case .separator:
+                menu.addItem(.separator())
+            case .info(let text, let toolTip):
+                let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                item.toolTip = toolTip
+                menu.addItem(item)
+            case .action(let title, let selector, let key, let checked, let tag):
+                let item = NSMenuItem(title: title, action: selector, keyEquivalent: key)
+                item.target = self
+                item.state = checked ? .on : .off
+                item.tag = tag
+                menu.addItem(item)
             }
-            menu.addItem(.separator())
         }
-
-        menu.addItem(actionItem("Refresh Now", #selector(refreshNow), key: "r"))
-        for (index, provider) in engine.providers.enumerated() {
-            let item = actionItem("Open \(provider.name) Usage Page", #selector(openUsagePage(_:)))
-            item.tag = index
-            menu.addItem(item)
-        }
-        menu.addItem(.separator())
-        let login = actionItem("Start at Login", #selector(toggleStartAtLogin))
-        login.state = LoginItem.isEnabled ? .on : .off
-        menu.addItem(login)
-        menu.addItem(.separator())
-        let about = NSMenuItem(title: ["Headroom \(appVersion)", updates.status].compactMap { $0 }.joined(separator: " · "), action: nil, keyEquivalent: "")
-        about.isEnabled = false
-        menu.addItem(about)
-        if updates.installed != nil {
-            menu.addItem(actionItem("Restart to Update", #selector(restartToUpdate)))
-        } else if updates.canUpdate {
-            menu.addItem(actionItem("Check for Updates", #selector(checkForUpdates)))
-        }
-        menu.addItem(actionItem("Quit Headroom", #selector(quit), key: "q"))
-    }
-
-    private func actionItem(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        return item
     }
 
     // MARK: Menu
@@ -127,27 +124,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menuIsOpen = false
     }
 
-    @objc private func refreshNow() {
+    @objc func refreshNow() {
         engine.refresh(manual: true)
     }
 
-    @objc private func toggleStartAtLogin() {
+    @objc func toggleShowPace() {
+        Preferences.showPace.toggle()
+    }
+
+    @objc func toggleStartAtLogin() {
         try? LoginItem.set(enabled: !LoginItem.isEnabled)
     }
 
-    @objc private func restartToUpdate() {
+    @objc func restartToUpdate() {
         updates.restart()
     }
 
-    @objc private func checkForUpdates() {
+    @objc func checkForUpdates() {
         updates.check()
     }
 
-    @objc private func openUsagePage(_ sender: NSMenuItem) {
+    @objc func openUsagePage(_ sender: NSMenuItem) {
         NSWorkspace.shared.open(engine.providers[sender.tag].usageURL)
     }
 
-    @objc private func quit() {
+    @objc func quit() {
         NSApp.terminate(nil)
     }
 }
@@ -207,7 +208,7 @@ MainActor.assumeIsolated {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.
         let engine = Engine(providers: providers, cacheFile: cacheFile)
         do {
-            try Render.png(engine: engine, to: URL(fileURLWithPath: path), dark: arguments.contains("--dark"), badge: arguments.contains("--badge"))
+            try Render.png(engine: engine, to: URL(fileURLWithPath: path), dark: arguments.contains("--dark"), updateReady: arguments.contains("--update-ready"))
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("render failed: \(error)\n".utf8))

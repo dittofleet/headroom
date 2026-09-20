@@ -5,13 +5,22 @@ import HeadroomCore
 /// state. For docs and for checking the look on a machine you can't see.
 @MainActor
 enum Render {
-    static func png(engine: Engine, to url: URL, dark: Bool, badge: Bool = false, now: Date = Date()) throws {
+    static func png(engine: Engine, to url: URL, dark: Bool, updateReady: Bool = false, now: Date = Date()) throws {
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
-        let views = menuViews(engine: engine, now: now).flatMap { $0 }
-        let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now), badge: badge)
+        var chrome = AppDelegate(engine: engine).chrome
+        if updateReady { (chrome.updateReady, chrome.about) = (true, chrome.about + " · v0.0.2 is ready") }
+        let entries = menuEntries(engine: engine, chrome: chrome, now: now)
+        let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now), badge: updateReady)
+        func height(_ entry: MenuEntry) -> CGFloat {
+            switch entry {
+            case .view(let view): return view.frame.height
+            case .separator: return 11
+            case .info, .action: return 22
+            }
+        }
 
         let barHeight: CGFloat = 24, padding: CGFloat = 6
-        let size = NSSize(width: MenuMetrics.width, height: barHeight + padding * 2 + views.reduce(0) { $0 + $1.frame.height })
+        let size = NSSize(width: MenuMetrics.width, height: barHeight + padding * 2 + entries.reduce(0) { $0 + height($1) })
         let scale: CGFloat = 2
         let bitmap = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
@@ -44,14 +53,33 @@ enum Render {
             tinted.draw(in: iconRect)
 
             var y = bar.minY - padding
-            for view in views {
-                y -= view.frame.height
-                let transform = NSAffineTransform()
-                transform.translateX(by: 0, yBy: y)
-                NSGraphicsContext.saveGraphicsState()
-                transform.concat()
-                view.draw(view.bounds)
-                NSGraphicsContext.restoreGraphicsState()
+            // Standard items are approximated; the custom rows are the
+            // app's own views, drawn by their own code.
+            let font = NSFont.menuFont(ofSize: 13)
+            func text(_ string: String, x: CGFloat, color: NSColor, rightAligned: Bool = false) {
+                let drawn = NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color])
+                drawn.draw(at: NSPoint(x: rightAligned ? x - drawn.size().width : x, y: y + (22 - drawn.size().height) / 2))
+            }
+            for entry in entries {
+                y -= height(entry)
+                switch entry {
+                case .view(let view):
+                    let transform = NSAffineTransform()
+                    transform.translateX(by: 0, yBy: y)
+                    NSGraphicsContext.saveGraphicsState()
+                    transform.concat()
+                    view.draw(view.bounds)
+                    NSGraphicsContext.restoreGraphicsState()
+                case .separator:
+                    NSColor.separatorColor.setFill()
+                    NSRect(x: MenuMetrics.inset, y: y + 5, width: size.width - MenuMetrics.inset * 2, height: 1).fill()
+                case .info(let string, _):
+                    text(string, x: 26, color: .tertiaryLabelColor)
+                case .action(let title, _, let key, let checked, _):
+                    if checked { text("✓", x: 9, color: .labelColor) }
+                    text(title, x: 26, color: .labelColor)
+                    if !key.isEmpty { text("⌘\(key.uppercased())", x: size.width - MenuMetrics.inset, color: .tertiaryLabelColor, rightAligned: true) }
+                }
             }
         }
         NSGraphicsContext.restoreGraphicsState()
