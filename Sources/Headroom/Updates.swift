@@ -77,7 +77,8 @@ final class UpdateController {
     /// Start the copy now on disk in place of this one.
     func restart() {
         let process = Process()
-        if let label = Bundle.main.bundleIdentifier, ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == label {
+        let label = LoginItem.label
+        if ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == label {
             // Started by our LaunchAgent: have launchd restart the job, so
             // the new copy stays under its care.
             process.executableURL = URL(fileURLWithPath: "/bin/launchctl")

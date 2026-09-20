@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         render()
         engine.refresh()
         updates.tick()
+        LoginItem.repairIfMoved()
 
         // One cheap tick a minute: it fetches only what is due, and keeps
         // countdowns and rolled-over windows honest in between.
@@ -91,6 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        let login = actionItem("Start at Login", #selector(toggleStartAtLogin))
+        login.state = LoginItem.isEnabled ? .on : .off
+        menu.addItem(login)
+        menu.addItem(.separator())
         let about = NSMenuItem(title: ["Headroom \(appVersion)", updates.status].compactMap { $0 }.joined(separator: " · "), action: nil, keyEquivalent: "")
         about.isEnabled = false
         menu.addItem(about)
@@ -126,6 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.refresh(manual: true)
     }
 
+    @objc private func toggleStartAtLogin() {
+        try? LoginItem.set(enabled: !LoginItem.isEnabled)
+    }
+
     @objc private func restartToUpdate() {
         updates.restart()
     }
@@ -151,6 +160,22 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 if arguments.contains("--version") {
     print(appVersion)
     exit(0)
+}
+
+if let index = arguments.firstIndex(of: "--login-item") {
+    // For install.sh and diagnostics: on, off, or (anything else) just report.
+    do {
+        switch arguments.dropFirst(index + 1).first {
+        case "on": try LoginItem.set(enabled: true)
+        case "off": try LoginItem.set(enabled: false)
+        default: break
+        }
+        print(LoginItem.isEnabled ? "on" : "off")
+        exit(0)
+    } catch {
+        FileHandle.standardError.write(Data("login item: \(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
 }
 
 if arguments.contains("--print") {

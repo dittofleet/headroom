@@ -35,33 +35,10 @@ rm -rf "$APP"
 ditto "$TMP/Headroom.app" "$APP"
 echo "Installed $APP" >&2
 
-# launchd starts it at login and restarts it if it crashes. Quitting from
-# the menu is a clean exit, so it stays quit until the next login.
-cat > "$PLIST" <<PLIST_EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>$LABEL</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>$APP/Contents/MacOS/Headroom</string>
-	</array>
-	<key>RunAtLoad</key>
-	<true/>
-	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
-	<key>LimitLoadToSessionType</key>
-	<string>Aqua</string>
-	<key>ProcessType</key>
-	<string>Interactive</string>
-</dict>
-</plist>
-PLIST_EOF
-
+# The app writes its own LaunchAgent (the same one its "Start at Login"
+# menu item manages): launchd starts it at login and restarts it if it
+# crashes. Quitting from the menu is a clean exit, so it stays quit until
+# the next login.
+"$APP/Contents/MacOS/Headroom" --login-item on >/dev/null
 launchctl bootstrap "$GUI_DOMAIN" "$PLIST"
 echo "Headroom is running in the menu bar and will start at login." >&2
