@@ -79,21 +79,12 @@ final class UpdateController {
 
     /// Start the copy now on disk in place of this one.
     func restart() {
-        let process = Process()
-        let label = LoginItem.label
-        if ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == label {
-            // Started by our LaunchAgent: have launchd restart the job, so
-            // the new copy stays under its care.
-            process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            process.arguments = ["kickstart", "-k", "gui/\(getuid())/\(label)"]
-        } else {
-            // Started by hand: reopen once this copy is gone, since a second
-            // instance refuses to run beside the first.
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open \"$2\"", "sh", "\(getpid())", appURL.path]
-        }
-        guard (try? process.run()) != nil else { return }
-        // kickstart kills us itself; otherwise leave so the waiter can reopen.
-        if process.executableURL?.lastPathComponent == "sh" { NSApp.terminate(nil) }
+        // Reopen once this copy is gone, since a second instance refuses to
+        // run beside the first.
+        let waiter = Process()
+        waiter.executableURL = URL(fileURLWithPath: "/bin/sh")
+        waiter.arguments = ["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open \"$2\"", "sh", "\(getpid())", appURL.path]
+        guard (try? waiter.run()) != nil else { return }
+        NSApp.terminate(nil)
     }
 }

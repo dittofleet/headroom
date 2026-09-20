@@ -28,7 +28,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         render()
         engine.refresh()
         updates.tick()
-        LoginItem.repairIfMoved()
 
         // One cheap tick a minute: it fetches only what is due, and keeps
         // countdowns and rolled-over windows honest in between.
@@ -133,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func toggleStartAtLogin() {
-        try? LoginItem.set(enabled: !LoginItem.isEnabled)
+        do { try LoginItem.set(enabled: !LoginItem.isEnabled) } catch { LoginItem.openSystemSettings() }
     }
 
     @objc func restartToUpdate() {

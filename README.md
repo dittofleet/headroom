@@ -27,16 +27,16 @@ curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/install.sh
 
 Releases are universal, signed with a Developer ID, and notarized.
 
-This puts `Headroom.app` in `/Applications`, starts it, and turns on
-**Start at Login**. You can switch that off and on from the menu. While it
-is on, launchd also brings the app back if it ever crashes; quitting from
-the menu keeps it quit until the next login.
+This puts `Headroom.app` in `/Applications`, opens it, and turns on
+**Start at Login**, which you can switch off and on from the menu.
 
-If you download `Headroom.zip` from a release instead, open the app and
-tick Start at Login yourself. To build from a checkout instead, run
-`make install` inside it (needs the Xcode command line tools).
+If you download `Headroom.zip` from a release instead, drag the app to
+`/Applications`, open it, and tick Start at Login yourself. To build from a
+checkout, run `make install` inside it (needs the Xcode command line
+tools).
 
-`./uninstall.sh` removes all of it.
+To uninstall, quit Headroom and move it to the Trash. Nothing is installed
+outside the app, and its login item goes with it.
 
 ## Updates
 
