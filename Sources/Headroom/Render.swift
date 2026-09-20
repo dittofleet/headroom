@@ -5,10 +5,10 @@ import HeadroomCore
 /// state. For docs and for checking the look on a machine you can't see.
 @MainActor
 enum Render {
-    static func png(engine: Engine, to url: URL, dark: Bool, now: Date = Date()) throws {
+    static func png(engine: Engine, to url: URL, dark: Bool, badge: Bool = false, now: Date = Date()) throws {
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
         let views = menuViews(engine: engine, now: now).flatMap { $0 }
-        let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now))
+        let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now), badge: badge)
 
         let barHeight: CGFloat = 24, padding: CGFloat = 6
         let size = NSSize(width: MenuMetrics.width, height: barHeight + padding * 2 + views.reduce(0) { $0 + $1.frame.height })

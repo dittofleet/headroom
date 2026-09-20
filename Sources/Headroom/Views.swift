@@ -40,11 +40,13 @@ enum StatusIcon {
         }
     }
 
-    static func image(rows: [Row]) -> NSImage {
+    /// `badge` adds a dot: an update is installed and waiting for a restart.
+    static func image(rows: [Row], badge: Bool = false) -> NSImage {
         let rowHeight: CGFloat = rows.count > 1 ? 10 : 14
         let fontSize: CGFloat = rows.count > 1 ? 9 : 11
         let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, numberWidth: CGFloat = fontSize * 2.1
-        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
+        let badgeWidth: CGFloat = badge ? 7 : 0
+        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
 
         let image = NSImage(size: size, flipped: false) { _ in
@@ -66,7 +68,11 @@ enum StatusIcon {
 
                 let text = row.percent.map { "\(Format.wholePercent($0))" } ?? "–"
                 let number = NSAttributedString(string: text, attributes: attributes)
-                number.draw(at: NSPoint(x: size.width - number.size().width, y: y + (rowHeight - number.size().height) / 2))
+                number.draw(at: NSPoint(x: size.width - badgeWidth - number.size().width, y: y + (rowHeight - number.size().height) / 2))
+            }
+            if badge {
+                NSColor.black.setFill()
+                NSBezierPath(ovalIn: NSRect(x: size.width - 4, y: (size.height - 4) / 2, width: 4, height: 4)).fill()
             }
             return true
         }

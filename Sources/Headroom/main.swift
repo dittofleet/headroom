@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let menu = NSMenu()
     private var menuIsOpen = false
     private var iconRows: [StatusIcon.Row]?
+    private var iconBadged = false
     private let updates = UpdateController()
 
     init(engine: Engine) {
@@ -24,7 +25,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         engine.onChange = { [weak self] in self?.render() }
         updates.onChange = { [weak self] in self?.render() }
-        updates.canRelaunch = { [weak self] in self?.menuIsOpen != true }
         render()
         engine.refresh()
         updates.tick()
@@ -57,9 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let now = Date()
         // Most ticks change nothing; keep the image AppKit already rasterized.
         let rows = StatusIcon.rows(engine: engine, now: now)
-        if rows != iconRows {
-            iconRows = rows
-            statusItem.button?.image = StatusIcon.image(rows: rows)
+        let badged = updates.installed != nil
+        if rows != iconRows || badged != iconBadged {
+            (iconRows, iconBadged) = (rows, badged)
+            statusItem.button?.image = StatusIcon.image(rows: rows, badge: badged)
         }
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(now: now))
         if menuIsOpen { buildMenu(now: now) }
@@ -93,7 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let about = NSMenuItem(title: ["Headroom \(appVersion)", updates.status].compactMap { $0 }.joined(separator: " · "), action: nil, keyEquivalent: "")
         about.isEnabled = false
         menu.addItem(about)
-        if updates.canUpdate { menu.addItem(actionItem("Check for Updates", #selector(checkForUpdates))) }
+        if updates.installed != nil {
+            menu.addItem(actionItem("Restart to Update", #selector(restartToUpdate)))
+        } else if updates.canUpdate {
+            menu.addItem(actionItem("Check for Updates", #selector(checkForUpdates)))
+        }
         menu.addItem(actionItem("Quit Headroom", #selector(quit), key: "q"))
     }
 
@@ -115,11 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) {
         menuIsOpen = false
-        updates.relaunchWhenIdle()
     }
 
     @objc private func refreshNow() {
         engine.refresh(manual: true)
+    }
+
+    @objc private func restartToUpdate() {
+        updates.restart()
     }
 
     @objc private func checkForUpdates() {
@@ -174,7 +182,7 @@ MainActor.assumeIsolated {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.
         let engine = Engine(providers: providers, cacheFile: cacheFile)
         do {
-            try Render.png(engine: engine, to: URL(fileURLWithPath: path), dark: arguments.contains("--dark"))
+            try Render.png(engine: engine, to: URL(fileURLWithPath: path), dark: arguments.contains("--dark"), badge: arguments.contains("--badge"))
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("render failed: \(error)\n".utf8))

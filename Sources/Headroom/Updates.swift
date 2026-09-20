@@ -1,8 +1,10 @@
 import AppKit
 import HeadroomCore
 
-/// Keeps the installed app current: checks a few times a day, installs what
-/// it finds, and relaunches into it. Only release builds update themselves;
+/// Keeps the installed app current: checks a few times a day and installs
+/// what it finds. The new copy is on disk from then on, and takes over when
+/// you choose "Restart to Update" or the app next starts for any reason.
+/// Only release builds update themselves;
 /// a copy built from source has no signing team to hold an update to, and
 /// is updated the way it was installed.
 @MainActor
@@ -16,13 +18,12 @@ final class UpdateController {
     private let updater: Updater?
     private let appURL = Bundle.main.bundleURL
     private var busy = false
-    private var installed: Version?
+    /// Installed on disk and waiting for a restart.
+    private(set) var installed: Version?
 
     /// Shown in the menu next to the version.
     private(set) var status: String?
     var onChange: (() -> Void)?
-    /// A relaunch under an open menu would yank it away.
-    var canRelaunch: () -> Bool = { true }
 
     init() {
         current = Version(appVersion)
@@ -38,8 +39,7 @@ final class UpdateController {
 
     /// Called every minute; does something a few times a day.
     func tick(now: Date = Date()) {
-        if installed != nil { return relaunchWhenIdle() }
-        guard UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true else { return }
+        guard installed == nil, UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true else { return }
         let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date ?? .distantPast
         // A clock set backwards must not postpone the next check forever.
         if now.timeIntervalSince(last) >= Self.checkInterval || last > now { check() }
@@ -58,8 +58,7 @@ final class UpdateController {
                     set(status: "Installing \(latest)…")
                     try await updater.install(latest, over: appURL)
                     installed = latest
-                    set(status: "Restarting into \(latest)…")
-                    relaunchWhenIdle()
+                    set(status: "\(latest) is ready")
                 } else {
                     set(status: "Up to date")
                 }
@@ -75,8 +74,8 @@ final class UpdateController {
         onChange?()
     }
 
-    func relaunchWhenIdle() {
-        guard installed != nil, canRelaunch() else { return }
+    /// Start the copy now on disk in place of this one.
+    func restart() {
         let process = Process()
         if let label = Bundle.main.bundleIdentifier, ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == label {
             // Started by our LaunchAgent: have launchd restart the job, so

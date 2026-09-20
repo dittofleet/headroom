@@ -35,9 +35,11 @@ keeps it quit until the next login. To build from a checkout instead, run
 ## Updates
 
 headroom keeps itself current. A few times a day it asks GitHub for the
-latest release, and when there is a newer one it downloads it, swaps it in,
-and restarts itself (never while the menu is open). "Check for Updates" in
-the menu does the same on demand.
+latest release, and when there is a newer one it downloads and installs it
+in the background. It never restarts on its own: a dot appears on the icon
+and the menu offers "Restart to Update", and the new version also simply
+takes over the next time the app starts. "Check for Updates" in the menu
+looks right away.
 
 Because this app reads auth tokens, it will not install just anything the
 download URL returns. An update must be signed by the same Developer ID
@@ -49,7 +51,7 @@ copy stays as it was.
 A copy built from a checkout has no signing team to hold an update to, so
 it does not update itself: pull and run `./install.sh` again.
 
-To turn automatic updates off (the menu item keeps working):
+To turn the background checks off (the menu item keeps working):
 
 ```sh
 defaults write io.github.dittofleet.headroom autoUpdate -bool false
