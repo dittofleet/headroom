@@ -1,6 +1,6 @@
 # headroom
 
-A lightweight menu bar app for your Claude and Codex usage limits.
+A simple menu bar app for your Claude and Codex usage limits.
 
 <img src="docs/menu.png" width="270" alt="The headroom menu">
 
@@ -13,9 +13,10 @@ Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick
 means you are burning faster than the window refills.
 
-It is one small native binary with no dependencies: no Electron, no login
-flow, no settings. It borrows the sessions Claude Code and Codex already
-have and otherwise stays out of the way.
+It does one thing and is simple about it: no login flow, no settings, no
+dependencies. It borrows the sessions Claude Code and Codex already have,
+shows you the numbers, and otherwise stays out of the way. Being a single
+small native binary is a side effect of that.
 
 ## Install
 
