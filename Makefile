@@ -11,7 +11,8 @@ BUILD = swift build -c release $(ARCHS)
 app:
 	$(BUILD)
 	rm -rf $(APP)
-	mkdir -p $(APP)/Contents/MacOS
+	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
+	cp AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	cp "$$($(BUILD) --show-bin-path)/Headroom" $(APP)/Contents/MacOS/Headroom
 	sed 's/VERSION/$(VERSION:v%=%)/' Info.plist > $(APP)/Contents/Info.plist
 ifeq ($(IDENTITY),)
@@ -27,7 +28,11 @@ zip: app
 test:
 	swift test
 
+# Redraws AppIcon.icns, which is committed so a build doesn't need this.
+icon:
+	swift scripts/make-icon.swift
+
 clean:
 	rm -rf .build dist
 
-.PHONY: app zip test clean
+.PHONY: app zip test icon clean
