@@ -3,17 +3,13 @@ import HeadroomCore
 
 let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 
-/// Older than this, numbers are drawn dimmed: still the best we have, but
-/// not to be trusted at a glance.
-let staleAfter: TimeInterval = 20 * 60
-
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let engine: Engine
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var menuIsOpen = false
-    private var timer: Timer?
+    private var iconRows: [StatusIcon.Row]?
 
     init(engine: Engine) {
         self.engine = engine
@@ -21,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.behavior = []
         statusItem.menu = menu
         menu.delegate = self
         menu.autoenablesItems = false
@@ -40,7 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         timer.tolerance = 10
         RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -56,14 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func render() {
         let now = Date()
-        statusItem.button?.image = StatusIcon.image(rows: engine.providers.map { provider in
-            let snapshot = engine.state(provider).snapshot
-            return StatusIcon.Row(
-                glyph: provider.glyph,
-                percent: snapshot?.headline(at: now)?.percent(at: now),
-                stale: snapshot.map { now.timeIntervalSince($0.fetchedAt) > staleAfter } ?? true
-            )
-        })
+        // Most ticks change nothing; keep the image AppKit already rasterized.
+        let rows = StatusIcon.rows(engine: engine, now: now)
+        if rows != iconRows {
+            iconRows = rows
+            statusItem.button?.image = StatusIcon.image(rows: rows)
+        }
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(now: now))
         if menuIsOpen { buildMenu(now: now) }
     }
@@ -77,25 +69,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildMenu(now: Date) {
         menu.removeAllItems()
-        for provider in engine.providers {
-            let state = engine.state(provider)
-            let stale = state.snapshot.map { now.timeIntervalSince($0.fetchedAt) > staleAfter } ?? true
-            let detail = engine.isFetching(provider) ? "Updating…"
-                : state.snapshot.map { Format.age($0.fetchedAt, now: now) } ?? "No data"
-
-            menu.addItem(viewItem(HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, detailIsProblem: stale && !engine.isFetching(provider))))
-            for limit in state.snapshot?.limits ?? [] {
-                menu.addItem(viewItem(LimitRowView(limit: limit, now: now, stale: stale)))
-            }
-            if let error = state.lastError {
-                let retry = max(state.nextFetchAt, state.throttledUntil)
-                let suffix = retry > now ? " · retry in \(Format.duration(retry.timeIntervalSince(now)))" : ""
-                let item = NSMenuItem(title: "⚠ \(error)\(suffix)", action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                menu.addItem(item)
-            }
-            menu.addItem(.separator())
+        for view in menuViews(engine: engine, now: now) {
+            // Each provider starts with its heading; rule them apart.
+            if view is HeaderView, !menu.items.isEmpty { menu.addItem(.separator()) }
+            let item = NSMenuItem()
+            item.view = view
+            menu.addItem(item)
         }
+        menu.addItem(.separator())
 
         menu.addItem(actionItem("Refresh Now", #selector(refreshNow), key: "r"))
         for (index, provider) in engine.providers.enumerated() {
@@ -105,12 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit Headroom", #selector(quit), key: "q"))
-    }
-
-    private func viewItem(_ view: NSView) -> NSMenuItem {
-        let item = NSMenuItem()
-        item.view = view
-        return item
     }
 
     private func actionItem(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -149,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 // MARK: Entry point
 
 let providers: [any Provider] = [ClaudeProvider(), CodexProvider()]
-let arguments = CommandLine.arguments.dropFirst()
+let arguments = Array(CommandLine.arguments.dropFirst())
 
 if arguments.contains("--version") {
     print(version)
@@ -181,7 +156,7 @@ MainActor.assumeIsolated {
     let cacheFile = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
         .appendingPathComponent("headroom/state.json")
 
-    if let index = arguments.firstIndex(of: "--render"), let path = arguments[safe: index + 1] {
+    if let index = arguments.firstIndex(of: "--render"), let path = arguments[(index + 1)...].first {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.
         let engine = Engine(providers: providers, cacheFile: cacheFile)
         do {
@@ -204,10 +179,4 @@ MainActor.assumeIsolated {
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
     withExtendedLifetime(delegate) { app.run() }
-}
-
-extension ArraySlice {
-    subscript(safe index: Index) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
 }

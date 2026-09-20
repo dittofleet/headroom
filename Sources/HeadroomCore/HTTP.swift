@@ -36,16 +36,18 @@ enum HTTP {
 }
 
 enum Parse {
+    private static let iso = ISO8601DateFormatter()
+
     /// ISO 8601 with any number of fractional digits, which
     /// ISO8601DateFormatter does not reliably accept.
     static func isoDate(_ value: Any?) -> Date? {
         guard let string = value as? String else { return nil }
         let trimmed = string.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        return ISO8601DateFormatter().date(from: trimmed)
+        return iso.date(from: trimmed)
     }
 
     static func epochDate(_ value: Any?) -> Date? {
-        guard let seconds = (value as? NSNumber)?.doubleValue, seconds > 0 else { return nil }
+        guard let seconds = number(value), seconds > 0 else { return nil }
         return Date(timeIntervalSince1970: seconds)
     }
 

@@ -4,6 +4,10 @@ import Foundation
 public struct Limit: Codable, Equatable, Sendable {
     public enum Kind: String, Codable, Sendable { case session, weekly, other }
 
+    /// Where a limit starts to need attention, and where it is nearly gone.
+    public static let warningPercent: Double = 75
+    public static let criticalPercent: Double = 90
+
     public var kind: Kind
     public var label: String
     /// Percent used as of the fetch, 0...100.
@@ -44,11 +48,25 @@ public struct Snapshot: Codable, Equatable, Sendable {
         self.fetchedAt = fetchedAt
     }
 
+    /// Older than this, numbers are still the best we have but not to be
+    /// trusted at a glance.
+    public static let staleAfter: TimeInterval = 20 * 60
+
+    public func isStale(at now: Date) -> Bool {
+        now.timeIntervalSince(fetchedAt) > Self.staleAfter
+    }
+
+    /// When the first window rolls over, after which these numbers are
+    /// known to be wrong.
+    public var expiresAt: Date? {
+        limits.compactMap(\.resetsAt).filter { $0 > fetchedAt }.min()
+    }
+
     /// The one number worth showing in the menu bar: the session window,
     /// unless some other window is nearly exhausted and is the real blocker.
     public func headline(at now: Date) -> Limit? {
         let worst = limits.max { $0.percent(at: now) < $1.percent(at: now) }
-        if let worst, worst.percent(at: now) >= 90 { return worst }
+        if let worst, worst.percent(at: now) >= Limit.criticalPercent { return worst }
         return limits.first { $0.kind == .session } ?? worst
     }
 }
@@ -78,8 +96,10 @@ public struct ProviderState: Codable, Sendable {
     public var lastError: String?
     /// Next routine refresh. A manual refresh may run earlier.
     public var nextFetchAt: Date = .distantPast
-    /// Server-mandated cooldown. Nothing fetches before this.
+    /// Server-mandated cooldown. Unlike `nextFetchAt`, this also blocks
+    /// manual refreshes.
     public var throttledUntil: Date = .distantPast
+    public var lastAttemptAt: Date = .distantPast
 
     public init() {}
 }

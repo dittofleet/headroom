@@ -7,22 +7,8 @@ import HeadroomCore
 enum Render {
     static func png(engine: Engine, to url: URL, dark: Bool, now: Date = Date()) throws {
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
-        var views: [NSView] = []
-        for provider in engine.providers {
-            let state = engine.state(provider)
-            let stale = state.snapshot.map { now.timeIntervalSince($0.fetchedAt) > staleAfter } ?? true
-            let detail = state.snapshot.map { Format.age($0.fetchedAt, now: now) } ?? "No data"
-            views.append(HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, detailIsProblem: stale))
-            views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale) }
-        }
-        let icon = StatusIcon.image(rows: engine.providers.map { provider in
-            let snapshot = engine.state(provider).snapshot
-            return StatusIcon.Row(
-                glyph: provider.glyph,
-                percent: snapshot?.headline(at: now)?.percent(at: now),
-                stale: snapshot.map { now.timeIntervalSince($0.fetchedAt) > staleAfter } ?? true
-            )
-        })
+        let views = menuViews(engine: engine, now: now)
+        let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now))
 
         let barHeight: CGFloat = 24, padding: CGFloat = 6
         let size = NSSize(width: MenuMetrics.width, height: barHeight + padding * 2 + views.reduce(0) { $0 + $1.frame.height })

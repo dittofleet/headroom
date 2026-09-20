@@ -3,12 +3,13 @@ VERSION ?= dev
 # CI passes: ARCHS="--arch arm64 --arch x86_64"
 ARCHS ?=
 APP = dist/Headroom.app
+BUILD = swift build -c release $(ARCHS)
 
 app:
-	swift build -c release $(ARCHS)
+	$(BUILD)
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS
-	cp "$$(swift build -c release $(ARCHS) --show-bin-path)/Headroom" $(APP)/Contents/MacOS/Headroom
+	cp "$$($(BUILD) --show-bin-path)/Headroom" $(APP)/Contents/MacOS/Headroom
 	sed 's/VERSION/$(VERSION:v%=%)/' Info.plist > $(APP)/Contents/Info.plist
 	codesign --force --sign - $(APP)
 

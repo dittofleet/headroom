@@ -5,7 +5,7 @@ enum Level {
     case normal, warning, critical
 
     init(percent: Double) {
-        self = percent >= 90 ? .critical : percent >= 75 ? .warning : .normal
+        self = percent >= Limit.criticalPercent ? .critical : percent >= Limit.warningPercent ? .warning : .normal
     }
 
     var color: NSColor? {
@@ -21,18 +21,30 @@ enum Level {
 /// headline percentage. Two stacked rows keep it narrow enough for notched
 /// displays.
 enum StatusIcon {
-    struct Row {
+    struct Row: Equatable {
         var glyph: String
         /// nil when there is no data at all.
         var percent: Double?
         var stale: Bool
     }
 
+    @MainActor
+    static func rows(engine: Engine, now: Date) -> [Row] {
+        engine.providers.map { provider in
+            let snapshot = engine.state(provider).snapshot
+            return Row(
+                glyph: provider.glyph,
+                percent: snapshot?.headline(at: now)?.percent(at: now),
+                stale: snapshot?.isStale(at: now) ?? true
+            )
+        }
+    }
+
     static func image(rows: [Row]) -> NSImage {
         let rowHeight: CGFloat = rows.count > 1 ? 10 : 14
         let fontSize: CGFloat = rows.count > 1 ? 9 : 11
         let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, numberWidth: CGFloat = fontSize * 2.1
-        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
+        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth, height: rowHeight * CGFloat(rows.count))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
 
         let image = NSImage(size: size, flipped: false) { _ in
@@ -50,16 +62,9 @@ enum StatusIcon {
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
-                color.withAlphaComponent(0.25 * alpha).setFill()
-                NSBezierPath(roundedRect: track, xRadius: 2, yRadius: 2).fill()
-                if let percent = row.percent, percent > 0 {
-                    var fill = track
-                    fill.size.width = max(track.width * percent / 100, 2)
-                    color.withAlphaComponent(alpha).setFill()
-                    NSBezierPath(roundedRect: fill, xRadius: 2, yRadius: 2).fill()
-                }
+                drawBar(in: track, percent: row.percent ?? 0, track: color.withAlphaComponent(0.25 * alpha), fill: color.withAlphaComponent(alpha))
 
-                let text = row.percent.map { "\(Int($0.rounded(.down)))" } ?? "–"
+                let text = row.percent.map { "\(Format.wholePercent($0))" } ?? "–"
                 let number = NSAttributedString(string: text, attributes: attributes)
                 number.draw(at: NSPoint(x: size.width - number.size().width, y: y + (rowHeight - number.size().height) / 2))
             }
@@ -69,6 +74,58 @@ enum StatusIcon {
         // give that up only when there is a warning color to show.
         image.isTemplate = levels.allSatisfy { $0 == .normal }
         return image
+    }
+}
+
+/// A rounded track with a fill that never shrinks below a visible nub.
+private func drawBar(in track: NSRect, percent: Double, track trackColor: NSColor, fill fillColor: NSColor) {
+    let radius = track.height / 2
+    trackColor.setFill()
+    NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
+    guard percent > 0 else { return }
+    var fill = track
+    fill.size.width = max(track.width * percent / 100, track.height)
+    fillColor.setFill()
+    NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
+}
+
+/// Everything the menu shows above its actions: per provider a heading, its
+/// limits, and the reason when the last refresh failed.
+@MainActor
+func menuViews(engine: Engine, now: Date) -> [NSView] {
+    engine.providers.flatMap { provider -> [NSView] in
+        let state = engine.state(provider)
+        let fetching = engine.isFetching(provider)
+        let stale = state.snapshot?.isStale(at: now) ?? true
+        let detail = fetching ? "Updating…" : state.snapshot.map { Format.age($0.fetchedAt, now: now) } ?? "No data"
+
+        var views: [NSView] = [HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, detailIsProblem: stale && !fetching)]
+        views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale) }
+        if let error = state.lastError {
+            let wait = state.nextFetchAt.timeIntervalSince(now)
+            views.append(NoticeView(text: wait > 0 ? "\(error) · retry in \(Format.duration(wait))" : error))
+        }
+        return views
+    }
+}
+
+/// Why the numbers above it are not fresh. Wraps, since reasons run long.
+final class NoticeView: NSView {
+    private let text: NSAttributedString
+
+    init(text: String) {
+        self.text = NSAttributedString(string: "⚠ \(text)", attributes: [
+            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.systemOrange,
+        ])
+        let width = MenuMetrics.width - MenuMetrics.inset * 2
+        let height = ceil(self.text.boundingRect(with: NSSize(width: width, height: 200), options: .usesLineFragmentOrigin).height)
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: height + 8))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        text.draw(with: bounds.insetBy(dx: MenuMetrics.inset, dy: 4), options: .usesLineFragmentOrigin)
     }
 }
 
@@ -120,7 +177,8 @@ final class LimitRowView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let percent = limit.percent(at: now)
-        let accent = Level(percent: percent).color ?? .controlAccentColor
+        let level = Level(percent: percent)
+        let accent = level.color ?? .controlAccentColor
         let inset = MenuMetrics.inset
 
         let label = NSAttributedString(string: limit.label, attributes: [
@@ -130,19 +188,12 @@ final class LimitRowView: NSView {
 
         let value = NSAttributedString(string: Format.percent(percent), attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: stale ? NSColor.secondaryLabelColor : (Level(percent: percent).color ?? .labelColor),
+            .foregroundColor: stale ? NSColor.secondaryLabelColor : (level.color ?? .labelColor),
         ])
         value.draw(at: NSPoint(x: bounds.width - inset - value.size().width, y: 26))
 
         let track = NSRect(x: inset, y: 18, width: bounds.width - inset * 2, height: 5)
-        NSColor.labelColor.withAlphaComponent(0.12).setFill()
-        NSBezierPath(roundedRect: track, xRadius: 2.5, yRadius: 2.5).fill()
-        if percent > 0 {
-            var fill = track
-            fill.size.width = max(track.width * percent / 100, 5)
-            accent.withAlphaComponent(stale ? 0.5 : 1).setFill()
-            NSBezierPath(roundedRect: fill, xRadius: 2.5, yRadius: 2.5).fill()
-        }
+        drawBar(in: track, percent: percent, track: NSColor.labelColor.withAlphaComponent(0.12), fill: accent.withAlphaComponent(stale ? 0.5 : 1))
         // Pace tick: how far through the window we are. Fill past the tick
         // means usage is running ahead of the clock.
         if let elapsed = limit.elapsedFraction(at: now) {

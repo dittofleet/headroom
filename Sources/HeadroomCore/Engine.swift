@@ -13,14 +13,14 @@ public final class Engine {
     public static let manualInterval: TimeInterval = 30
     static let failureBackoff: TimeInterval = 2 * 60
     static let maxRetryAfter: TimeInterval = 60 * 60
+    static let rolloverGrace: TimeInterval = 15
 
     public let providers: [any Provider]
-    public private(set) var states: [String: ProviderState]
+    private var states: [String: ProviderState]
     public var onChange: (() -> Void)?
 
     private let cacheFile: URL?
     private var inFlight: Set<String> = []
-    private var lastAttempt: [String: Date] = [:]
 
     public init(providers: [any Provider], cacheFile: URL?) {
         self.providers = providers
@@ -31,6 +31,9 @@ public final class Engine {
             states = saved
         }
         self.states = states
+        if let cacheFile {
+            try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
     }
 
     public func state(_ provider: any Provider) -> ProviderState {
@@ -44,31 +47,24 @@ public final class Engine {
     /// Fetch whatever is due. `manual` skips the routine interval but still
     /// honors server cooldowns.
     public func refresh(manual: Bool = false, now: Date = Date()) {
+        var started = false
         for provider in providers where isDue(provider, manual: manual, now: now) {
+            started = true
             inFlight.insert(provider.id)
-            lastAttempt[provider.id] = now
+            states[provider.id, default: ProviderState()].lastAttemptAt = now
             Task {
                 let result = await provider.fetch()
                 self.apply(result, to: provider)
             }
         }
-        if !inFlight.isEmpty { onChange?() }
+        if started { onChange?() }
     }
 
     func isDue(_ provider: any Provider, manual: Bool, now: Date) -> Bool {
         let state = state(provider)
         if inFlight.contains(provider.id) || now < state.throttledUntil { return false }
-        if manual {
-            return now.timeIntervalSince(lastAttempt[provider.id] ?? .distantPast) >= Self.manualInterval
-        }
-        if now >= state.nextFetchAt { return true }
-        // A window rolled over: the number on screen is known to be wrong.
-        let fetchedAt = state.snapshot?.fetchedAt ?? .distantPast
-        return state.snapshot?.limits.contains { limit in
-            guard let resetsAt = limit.resetsAt else { return false }
-            return resetsAt > fetchedAt && resetsAt.addingTimeInterval(15) <= now
-                && now.timeIntervalSince(lastAttempt[provider.id] ?? .distantPast) >= Self.failureBackoff
-        } ?? false
+        if manual { return now.timeIntervalSince(state.lastAttemptAt) >= Self.manualInterval }
+        return now >= state.nextFetchAt
     }
 
     func apply(_ result: Result<Snapshot, FetchFailure>, to provider: any Provider, now: Date = Date()) {
@@ -77,7 +73,11 @@ public final class Engine {
         case .success(let snapshot):
             state.snapshot = snapshot
             state.lastError = nil
-            state.nextFetchAt = now.addingTimeInterval(Self.refreshInterval)
+            // Refetch early when a window rolls over: past that point the
+            // number on screen is known to be wrong.
+            state.nextFetchAt = min(
+                now.addingTimeInterval(Self.refreshInterval),
+                snapshot.expiresAt?.addingTimeInterval(Self.rolloverGrace) ?? .distantFuture)
         case .failure(let failure):
             state.lastError = failure.message
             if let retryAfter = failure.retryAfter {
@@ -95,7 +95,6 @@ public final class Engine {
 
     private func save() {
         guard let cacheFile, let data = try? JSONEncoder().encode(states) else { return }
-        try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: cacheFile, options: .atomic)
     }
 }

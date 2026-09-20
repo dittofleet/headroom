@@ -1,8 +1,13 @@
 import Foundation
 
 public enum Format {
+    /// Rounded down, so 100 only ever means actually out.
+    public static func wholePercent(_ value: Double) -> Int {
+        Int(value.rounded(.down))
+    }
+
     public static func percent(_ value: Double) -> String {
-        "\(Int(value.rounded(.down)))%"
+        "\(wholePercent(value))%"
     }
 
     /// "1h 44m", "5d 7h", "12m", "now".

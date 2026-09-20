@@ -10,6 +10,7 @@ public struct ClaudeProvider: Provider {
     public let usageURL = URL(string: "https://claude.ai/settings/usage")!
 
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    private static let authAdvice = "refreshes when Claude Code next runs"
 
     public init() {}
 
@@ -20,7 +21,7 @@ public struct ClaudeProvider: Provider {
         // An expired token is a guaranteed 401 that still spends the
         // endpoint's small request quota.
         if let expiresAt = creds.expiresAt, expiresAt <= Date() {
-            return .failure(FetchFailure("Token expired, refreshes when Claude Code next runs"))
+            return .failure(FetchFailure("Token expired, \(Self.authAdvice)"))
         }
         let result = await HTTP.get(
             Self.endpoint,
@@ -29,7 +30,7 @@ public struct ClaudeProvider: Provider {
                 "anthropic-beta": "oauth-2025-04-20",
                 "Content-Type": "application/json",
             ],
-            authHint: "Token rejected, refreshes when Claude Code next runs"
+            authHint: "Token rejected, \(Self.authAdvice)"
         )
         return result.flatMap { data in
             guard var snapshot = Self.parse(data, now: Date()) else {
@@ -112,19 +113,23 @@ public struct ClaudeProvider: Provider {
         //
         // Claude Code scopes its entry by account name; an unscoped lookup
         // can surface an older orphaned entry whose token no longer refreshes.
-        var found: [Credentials] = []
+        //
+        // Stop at the first source with a live token, so the usual case is a
+        // single subprocess. An expired one is kept only to report it.
+        let now = Date()
+        var expired: Credentials?
+        func live(_ data: Data?) -> Credentials? {
+            guard let creds = data.flatMap(parseCredentials) else { return nil }
+            if (creds.expiresAt ?? .distantFuture) > now { return creds }
+            expired = expired ?? creds
+            return nil
+        }
         for scope in [["-a", NSUserName()], []] {
             let args = ["find-generic-password"] + scope + ["-s", "Claude Code-credentials", "-w"]
-            if let data = await Subprocess.run("/usr/bin/security", args), let creds = parseCredentials(data) {
-                found.append(creds)
-            }
+            if let creds = live(await Subprocess.run("/usr/bin/security", args)) { return creds }
         }
         let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/.credentials.json")
-        if let data = try? Data(contentsOf: file), let creds = parseCredentials(data) {
-            found.append(creds)
-        }
-        let now = Date()
-        return found.first { ($0.expiresAt ?? .distantFuture) > now } ?? found.first
+        return live(try? Data(contentsOf: file)) ?? expired
     }
 }
 

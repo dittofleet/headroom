@@ -64,6 +64,26 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(ClaudeProvider.parseCredentials(Data(#"{"claudeAiOauth": {}}"#.utf8)) == nil)
 }
 
+@Test func codexCredentials() throws {
+    let creds = try #require(CodexProvider.parseCredentials(Data(#"{"tokens": {"access_token": "t", "account_id": "a"}}"#.utf8)))
+    #expect(creds.token == "t" && creds.accountID == "a")
+    #expect(CodexProvider.parseCredentials(Data(#"{"OPENAI_API_KEY": "k", "tokens": null}"#.utf8)) == nil)
+}
+
+@Test func booleansAreNotNumbers() {
+    #expect(Parse.epochDate(true) == nil)
+    #expect(Parse.number(false) == nil)
+}
+
+@Test func snapshotStalenessAndExpiry() {
+    let soon = Limit(kind: .session, label: "Session", percent: 1, resetsAt: now.addingTimeInterval(100), windowSeconds: nil)
+    let past = Limit(kind: .weekly, label: "Weekly", percent: 1, resetsAt: now.addingTimeInterval(-5), windowSeconds: nil)
+    let snapshot = Snapshot(limits: [past, soon], plan: nil, fetchedAt: now)
+    #expect(snapshot.expiresAt == now.addingTimeInterval(100))
+    #expect(!snapshot.isStale(at: now.addingTimeInterval(19 * 60)))
+    #expect(snapshot.isStale(at: now.addingTimeInterval(21 * 60)))
+}
+
 @Test func limitRollsOverAfterReset() {
     let limit = Limit(kind: .session, label: "Session", percent: 80, resetsAt: now.addingTimeInterval(3600), windowSeconds: 18000)
     #expect(limit.percent(at: now) == 80)

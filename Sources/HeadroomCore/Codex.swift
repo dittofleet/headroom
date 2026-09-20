@@ -14,19 +14,23 @@ public struct CodexProvider: Provider {
     public init() {}
 
     public func fetch() async -> Result<Snapshot, FetchFailure> {
-        guard let data = try? Data(contentsOf: Self.authFile),
-              let tokens = Parse.object(data)?["tokens"] as? [String: Any],
-              let token = tokens["access_token"] as? String, !token.isEmpty
-        else {
+        guard let data = try? Data(contentsOf: Self.authFile), let creds = Self.parseCredentials(data) else {
             return .failure(FetchFailure("Not signed in to Codex"))
         }
-        var headers = ["Authorization": "Bearer \(token)", "User-Agent": "headroom"]
-        if let account = tokens["account_id"] as? String { headers["chatgpt-account-id"] = account }
+        var headers = ["Authorization": "Bearer \(creds.token)", "User-Agent": "headroom"]
+        if let accountID = creds.accountID { headers["chatgpt-account-id"] = accountID }
 
         let result = await HTTP.get(Self.endpoint, headers: headers, authHint: "Login expired, refreshes when Codex next runs")
         return result.flatMap { data in
             Self.parse(data, now: Date()).map { .success($0) } ?? .failure(FetchFailure("Unrecognized response"))
         }
+    }
+
+    static func parseCredentials(_ data: Data) -> (token: String, accountID: String?)? {
+        guard let tokens = Parse.object(data)?["tokens"] as? [String: Any],
+              let token = tokens["access_token"] as? String, !token.isEmpty
+        else { return nil }
+        return (token, tokens["account_id"] as? String)
     }
 
     private static var authFile: URL {
