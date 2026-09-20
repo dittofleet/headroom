@@ -16,7 +16,12 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+# Piped from curl, $0 is the shell and says nothing about where we are, so
+# only a real install.sh file next to a Package.swift counts as a checkout.
+DIR=""
+case "$0" in
+  *install.sh) [ -f "$0" ] && DIR="$(cd "$(dirname "$0")" && pwd)" ;;
+esac
 if [ -n "$DIR" ] && [ -f "$DIR/Package.swift" ]; then
   # Run from a checkout: build what is here.
   echo "Building Headroom from $DIR..." >&2
