@@ -162,7 +162,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
     entries.append(.separator)
-    entries.append(.action(title: "Show Pace", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
+    entries.append(.action(title: "Show Time Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
     entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
     entries.append(.separator)
@@ -193,6 +193,24 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
             views.append(NoticeView(text: wait > 0 ? "\(error) · retry in \(Format.duration(wait))" : error))
         }
         return views
+    }
+}
+
+/// A divider drawn by the app rather than the system, so it spans the same
+/// width as the rows around it. The system separator is indented to where
+/// menu item titles start, which is past where the rows begin.
+final class SeparatorView: NSView {
+    static let height: CGFloat = 11
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: Self.height))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        NSRect(x: MenuMetrics.inset, y: 5, width: bounds.width - MenuMetrics.inset * 2, height: 1).fill()
     }
 }
 

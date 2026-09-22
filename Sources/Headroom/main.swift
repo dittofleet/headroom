@@ -92,7 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 item.view = view
                 menu.addItem(item)
             case .separator:
-                menu.addItem(.separator())
+                let item = NSMenuItem()
+                item.view = SeparatorView()
+                menu.addItem(item)
             case .info(let text, let toolTip):
                 let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
                 item.isEnabled = false
