@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var menuIsOpen = false
     private var iconRows: [StatusIcon.Row]?
     private var iconBadged = false
+    private var iconNumbered = true
     private let updates = UpdateController()
 
     init(engine: Engine) {
@@ -58,9 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Most ticks change nothing; keep the image AppKit already rasterized.
         let rows = StatusIcon.rows(engine: engine, now: now)
         let badged = updates.installed != nil
-        if rows != iconRows || badged != iconBadged {
-            (iconRows, iconBadged) = (rows, badged)
-            statusItem.button?.image = StatusIcon.image(rows: rows, badge: badged)
+        let numbered = Preferences.showNumbers
+        if rows != iconRows || badged != iconBadged || numbered != iconNumbered {
+            (iconRows, iconBadged, iconNumbered) = (rows, badged, numbered)
+            statusItem.button?.image = StatusIcon.image(rows: rows, badge: badged, numbers: numbered)
         }
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(now: now))
         if menuIsOpen { buildMenu(now: now) }
@@ -80,7 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             updateReady: updates.installed != nil,
             canUpdate: updates.canUpdate,
             startAtLogin: LoginItem.isEnabled,
-            showPace: Preferences.showPace
+            showPace: Preferences.showPace,
+            showNumbers: Preferences.showNumbers
         )
     }
 
@@ -129,6 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func toggleShowPace() {
         Preferences.showPace.toggle()
+    }
+
+    @objc func toggleShowNumbers() {
+        Preferences.showNumbers.toggle()
+        render()
     }
 
     @objc func toggleStartAtLogin() {

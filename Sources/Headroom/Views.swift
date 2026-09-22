@@ -41,12 +41,20 @@ enum StatusIcon {
     }
 
     /// `badge` adds a dot: an update is installed and waiting for a restart.
-    static func image(rows: [Row], badge: Bool = false) -> NSImage {
+    /// `numbers` puts the percentage after each bar.
+    static func image(rows: [Row], badge: Bool = false, numbers: Bool = true) -> NSImage {
         let rowHeight: CGFloat = rows.count > 1 ? 10 : 14
         let fontSize: CGFloat = rows.count > 1 ? 9 : 11
-        let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, numberWidth: CGFloat = fontSize * 2.1
+        let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold)
+        let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, gap: CGFloat = 3
         let badgeWidth: CGFloat = badge ? 7 : 0
-        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
+        let texts = rows.map { row in row.percent.map { "\(Format.wholePercent($0))" } ?? "–" }
+        // Sized to the widest number showing, so a "9" sits as close to its
+        // bar as a "74" does. The width only moves when a digit comes or goes.
+        let numberWidth: CGFloat = numbers
+            ? gap + ceil(texts.map { NSAttributedString(string: $0, attributes: [.font: font]).size().width }.max() ?? 0)
+            : 0
+        let size = NSSize(width: glyphWidth + barWidth + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
 
         let image = NSImage(size: size, flipped: false) { _ in
@@ -55,7 +63,7 @@ enum StatusIcon {
                 let color = levels[index].color ?? .black
                 let alpha: CGFloat = row.stale || row.percent == nil ? 0.45 : 1
                 let attributes: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold),
+                    .font: font,
                     .foregroundColor: color.withAlphaComponent(alpha),
                 ]
 
@@ -66,9 +74,10 @@ enum StatusIcon {
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
                 drawBar(in: track, percent: row.percent ?? 0, track: color.withAlphaComponent(0.25 * alpha), fill: color.withAlphaComponent(alpha), minFill: 2)
 
-                let text = row.percent.map { "\(Format.wholePercent($0))" } ?? "–"
-                let number = NSAttributedString(string: text, attributes: attributes)
-                number.draw(at: NSPoint(x: size.width - badgeWidth - number.size().width, y: y + (rowHeight - number.size().height) / 2))
+                if numbers {
+                    let number = NSAttributedString(string: texts[index], attributes: attributes)
+                    number.draw(at: NSPoint(x: track.maxX + gap, y: y + (rowHeight - number.size().height) / 2))
+                }
             }
             if badge {
                 NSColor.black.setFill()
@@ -101,6 +110,12 @@ enum Preferences {
         get { UserDefaults.standard.object(forKey: "showPace") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "showPace") }
     }
+
+    /// The percentages in the menu bar icon. On unless switched off.
+    static var showNumbers: Bool {
+        get { UserDefaults.standard.object(forKey: "showNumbers") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "showNumbers") }
+    }
 }
 
 /// One line of the menu. The app turns these into NSMenuItems and --render
@@ -120,6 +135,7 @@ struct MenuChrome {
     var canUpdate: Bool
     var startAtLogin: Bool
     var showPace: Bool
+    var showNumbers: Bool
 }
 
 @MainActor
@@ -135,6 +151,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     }
     entries.append(.separator)
     entries.append(.action(title: "Show Pace", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
+    entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
     entries.append(.separator)
     entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
