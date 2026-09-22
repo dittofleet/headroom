@@ -14,7 +14,6 @@ enum Render {
         func height(_ entry: MenuEntry) -> CGFloat {
             switch entry {
             case .view(let view): return view.frame.height
-            case .separator: return SeparatorView.height
             case .info, .action: return 22
             }
         }
@@ -63,9 +62,7 @@ enum Render {
             for entry in entries {
                 y -= height(entry)
                 switch entry {
-                case .view, .separator:
-                    let view: NSView
-                    if case .view(let custom) = entry { view = custom } else { view = SeparatorView() }
+                case .view(let view):
                     let transform = NSAffineTransform()
                     transform.translateX(by: 0, yBy: y)
                     NSGraphicsContext.saveGraphicsState()

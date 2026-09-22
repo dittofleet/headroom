@@ -134,7 +134,6 @@ enum Preferences {
 /// draws them, so the two can't drift apart.
 enum MenuEntry {
     case view(NSView)
-    case separator
     case info(String, toolTip: String? = nil)
     case action(title: String, selector: Selector, key: String = "", checked: Bool = false, tag: Int = 0)
 }
@@ -155,17 +154,17 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     var entries: [MenuEntry] = []
     for group in menuViews(engine: engine, now: now, showPace: chrome.showPace) {
         entries += group.map(MenuEntry.view)
-        entries.append(.separator)
+        entries.append(.view(SeparatorView()))
     }
     entries.append(.action(title: "Refresh Now", selector: #selector(AppDelegate.refreshNow), key: "r"))
     for (index, provider) in engine.providers.enumerated() {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
-    entries.append(.separator)
+    entries.append(.view(SeparatorView()))
     entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
     entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
-    entries.append(.separator)
+    entries.append(.view(SeparatorView()))
     entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
     if chrome.updateReady {
         entries.append(.action(title: "Restart to Update", selector: #selector(AppDelegate.restartToUpdate)))
@@ -200,10 +199,8 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
 /// width as the rows around it. The system separator is indented to where
 /// menu item titles start, which is past where the rows begin.
 final class SeparatorView: NSView {
-    static let height: CGFloat = 11
-
     init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: Self.height))
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 11))
     }
 
     required init?(coder: NSCoder) { fatalError() }
