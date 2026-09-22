@@ -26,24 +26,38 @@ enum HTTP {
     static func get(_ url: URL, headers: [String: String], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                return .failure(FetchFailure("Unexpected response"))
-            }
-            switch http.statusCode {
-            case 200:
-                return .success(data)
-            case 401, 403:
-                return .failure(FetchFailure(authHint))
-            default:
-                let retryAfter = http.value(forHTTPHeaderField: "retry-after").flatMap(TimeInterval.init)
-                let what = http.statusCode == 429 ? "Rate limited" : "HTTP \(http.statusCode)"
-                return .failure(FetchFailure(what, retryAfter: retryAfter.flatMap { $0 > 0 ? $0 : nil }))
-            }
-        } catch {
+        guard let (status, data, http) = await send(request) else {
             return .failure(FetchFailure("Offline"))
         }
+        switch status {
+        case 200:
+            return .success(data)
+        case 401, 403:
+            return .failure(FetchFailure(authHint))
+        default:
+            let retryAfter = http.value(forHTTPHeaderField: "retry-after").flatMap(TimeInterval.init)
+            let what = status == 429 ? "Rate limited" : "HTTP \(status)"
+            return .failure(FetchFailure(what, retryAfter: retryAfter.flatMap { $0 > 0 ? $0 : nil }))
+        }
+    }
+
+    /// POST a JSON body. Nil when the request never got an answer; otherwise
+    /// the status and body, whatever the status, since the caller reads the
+    /// error body too.
+    static func post(_ url: URL, json: [String: Any]) async -> (status: Int, body: Data)? {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: json)
+        guard let (status, data, _) = await send(request) else { return nil }
+        return (status, data)
+    }
+
+    private static func send(_ request: URLRequest) async -> (Int, Data, HTTPURLResponse)? {
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return nil }
+        return (http.statusCode, data, http)
     }
 }
 

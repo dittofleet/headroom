@@ -1,8 +1,9 @@
 import Foundation
 
 /// Claude subscription usage, from the endpoint behind Claude Code's /usage.
-/// Auth is Claude Code's own OAuth token. We only ever read it: refreshing it
-/// ourselves would rotate the refresh token out from under Claude Code.
+/// Auth is Claude Code's own OAuth token. Once it has expired we renew it the
+/// way Claude Code would, and store the result back where Claude Code keeps
+/// it, so the two keep sharing one session instead of logging each other out.
 public struct ClaudeProvider: Provider {
     public let id = "claude"
     public let name = "Claude"
@@ -10,18 +11,21 @@ public struct ClaudeProvider: Provider {
     public let usageURL = URL(string: "https://claude.ai/settings/usage")!
 
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-    private static let authAdvice = "refreshes when Claude Code next runs"
+    static let signInAdvice = "sign in again with `claude login`"
 
     public init() {}
 
     public func fetch() async -> Result<Snapshot, FetchFailure> {
-        guard let creds = await Self.credentials() else {
+        guard var creds = await Self.credentials() else {
             return .failure(FetchFailure("Not signed in to Claude Code"))
         }
         // An expired token is a guaranteed 401 that still spends the
-        // endpoint's small request quota.
+        // endpoint's small request quota, so renew it first.
         if !creds.isLive(at: Date()) {
-            return .failure(FetchFailure("Token expired, \(Self.authAdvice)"))
+            switch await TokenRenewer.shared.renew(creds) {
+            case .success(let renewed): creds = renewed
+            case .failure(let failure): return .failure(failure)
+            }
         }
         let result = await HTTP.get(
             Self.endpoint,
@@ -30,7 +34,7 @@ public struct ClaudeProvider: Provider {
                 "anthropic-beta": "oauth-2025-04-20",
                 "Content-Type": "application/json",
             ],
-            authHint: "Token rejected, \(Self.authAdvice)"
+            authHint: "Token rejected, \(Self.signInAdvice)"
         )
         return result.flatMap { data in
             guard var snapshot = Self.parse(data, now: Date()) else {
@@ -91,25 +95,44 @@ public struct ClaudeProvider: Provider {
 
     // MARK: Credentials
 
-    struct Credentials {
+    struct Credentials: Sendable {
+        enum Source: Sendable { case keychain, file(URL) }
+
         var token: String
+        var refreshToken: String?
+        var scopes: [String]
         var expiresAt: Date?
         var plan: String?
+        /// The whole stored document and where it lives, so a renewed token
+        /// goes back among everything else Claude Code keeps there.
+        var document: Data
+        var source: Source
 
         func isLive(at now: Date) -> Bool {
             (expiresAt ?? .distantFuture) > now
         }
     }
 
-    static func parseCredentials(_ data: Data) -> Credentials? {
+    static func parseCredentials(_ data: Data, source: Credentials.Source = .keychain) -> Credentials? {
         guard let oauth = Parse.object(data)?["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String, !token.isEmpty
         else { return nil }
         let expiresAt = Parse.number(oauth["expiresAt"]).map { Date(timeIntervalSince1970: $0 / 1000) }
-        return Credentials(token: token, expiresAt: expiresAt, plan: (oauth["subscriptionType"] as? String)?.capitalized)
+        return Credentials(
+            token: token,
+            refreshToken: oauth["refreshToken"] as? String,
+            scopes: oauth["scopes"] as? [String] ?? [],
+            expiresAt: expiresAt,
+            plan: (oauth["subscriptionType"] as? String)?.capitalized,
+            document: data,
+            source: source
+        )
     }
 
-    private static func credentials() async -> Credentials? {
+    static let keychainService = "Claude Code-credentials"
+    static let configDirectory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+
+    static func credentials() async -> Credentials? {
         // Read the keychain through /usr/bin/security rather than the
         // Security framework: the item's ACL already trusts that binary (it
         // is how Claude Code itself reads it), while our own binary would
@@ -122,24 +145,163 @@ public struct ClaudeProvider: Provider {
         // single subprocess. An expired one is kept only to report it.
         let now = Date()
         var expired: Credentials?
-        func live(_ data: Data?) -> Credentials? {
-            guard let creds = data.flatMap(parseCredentials) else { return nil }
+        func live(_ data: Data?, source: Credentials.Source) -> Credentials? {
+            guard let creds = data.flatMap({ parseCredentials($0, source: source) }) else { return nil }
             if creds.isLive(at: now) { return creds }
             expired = expired ?? creds
             return nil
         }
         for scope in [["-a", NSUserName()], []] {
-            let args = ["find-generic-password"] + scope + ["-s", "Claude Code-credentials", "-w"]
-            if let creds = live(await Subprocess.run("/usr/bin/security", args)) { return creds }
+            let args = ["find-generic-password"] + scope + ["-s", keychainService, "-w"]
+            if let creds = live(await Subprocess.run("/usr/bin/security", args), source: .keychain) { return creds }
         }
-        let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/.credentials.json")
-        return live(try? Data(contentsOf: file)) ?? expired
+        let file = configDirectory.appendingPathComponent(".credentials.json")
+        return live(try? Data(contentsOf: file), source: .file(file)) ?? expired
+    }
+
+    // MARK: Renewal
+
+    struct Renewal: Equatable {
+        var token: String
+        /// Absent when the server kept the old one.
+        var refreshToken: String?
+        var expiresAt: Date
+        /// Absent when the server did not say.
+        var refreshTokenExpiresAt: Date?
+        var scopes: [String]
+    }
+
+    static func parseRenewal(_ data: Data, now: Date) -> Renewal? {
+        guard let root = Parse.object(data),
+              let token = root["access_token"] as? String, !token.isEmpty,
+              let expiresIn = Parse.number(root["expires_in"])
+        else { return nil }
+        let refresh = root["refresh_token"] as? String
+        let scope = root["scope"] as? String ?? ""
+        return Renewal(
+            token: token,
+            refreshToken: refresh.flatMap { $0.isEmpty ? nil : $0 },
+            expiresAt: now.addingTimeInterval(expiresIn),
+            refreshTokenExpiresAt: Parse.number(root["refresh_token_expires_in"]).map { now.addingTimeInterval($0) },
+            scopes: scope.split(separator: " ").map(String.init)
+        )
+    }
+
+    /// The stored document with the renewed token in place of the old one.
+    /// Everything else in it is kept as is, in the same shape Claude Code
+    /// writes: the keys it reads back are `accessToken`, `refreshToken`,
+    /// the expiries in milliseconds, and `scopes`.
+    static func renewedDocument(_ document: Data, with renewal: Renewal) -> Data? {
+        guard var root = Parse.object(document), var oauth = root["claudeAiOauth"] as? [String: Any] else { return nil }
+        oauth["accessToken"] = renewal.token
+        if let refreshToken = renewal.refreshToken { oauth["refreshToken"] = refreshToken }
+        oauth["expiresAt"] = Int64(renewal.expiresAt.timeIntervalSince1970 * 1000)
+        if let refreshExpiry = renewal.refreshTokenExpiresAt {
+            oauth["refreshTokenExpiresAt"] = Int64(refreshExpiry.timeIntervalSince1970 * 1000)
+        }
+        if !renewal.scopes.isEmpty { oauth["scopes"] = renewal.scopes }
+        root["claudeAiOauth"] = oauth
+        return try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys, .withoutEscapingSlashes])
+    }
+}
+
+/// Renews an expired Claude Code token, one at a time and never while
+/// Claude Code itself is doing the same.
+actor TokenRenewer {
+    static let shared = TokenRenewer()
+
+    private static let tokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
+    /// Claude Code's own OAuth client: the refresh token was issued to it.
+    private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    /// Claude Code takes this directory as a lock around its own refresh and
+    /// treats one older than a minute as abandoned. We do the same.
+    private static let lock = ClaudeProvider.configDirectory.appendingPathComponent(".oauth_refresh.lock")
+    private static let lockStaleAfter: TimeInterval = 60
+
+    /// Refresh tokens the server has already rejected. Asking again only
+    /// gets the same answer, and it stays that way until a new sign-in.
+    private var dead: Set<String> = []
+
+    func renew(_ creds: ClaudeProvider.Credentials) async -> Result<ClaudeProvider.Credentials, FetchFailure> {
+        let signedOut = FetchFailure("Session expired, \(ClaudeProvider.signInAdvice)")
+        guard let refreshToken = creds.refreshToken, !refreshToken.isEmpty, !dead.contains(refreshToken) else {
+            return .failure(signedOut)
+        }
+        guard Self.takeLock() else {
+            return .failure(FetchFailure("Token expired, Claude Code is renewing it"))
+        }
+        defer { try? FileManager.default.removeItem(at: Self.lock) }
+
+        // Claude Code may have finished renewing while we waited for the
+        // lock, in which case the stored token is already the new one.
+        if let current = await ClaudeProvider.credentials(), current.isLive(at: Date()) {
+            return .success(current)
+        }
+
+        var body: [String: Any] = ["grant_type": "refresh_token", "refresh_token": refreshToken, "client_id": Self.clientID]
+        if !creds.scopes.isEmpty { body["scope"] = creds.scopes.joined(separator: " ") }
+        guard let (status, data) = await HTTP.post(Self.tokenURL, json: body) else {
+            return .failure(FetchFailure("Offline"))
+        }
+        let now = Date()
+        guard status == 200 else {
+            if status == 400 || status == 401 {
+                dead.insert(refreshToken)
+                return .failure(signedOut)
+            }
+            let retryAfter: TimeInterval? = status == 429 ? 15 * 60 : nil
+            return .failure(FetchFailure("Token renewal failed (HTTP \(status))", retryAfter: retryAfter))
+        }
+        guard let renewal = ClaudeProvider.parseRenewal(data, now: now),
+              let document = ClaudeProvider.renewedDocument(creds.document, with: renewal)
+        else {
+            return .failure(FetchFailure("Token renewal failed, unrecognized response"))
+        }
+
+        // From here the old token may already be revoked, so the write is
+        // what keeps Claude Code signed in. Report loudly if it fails.
+        guard await Self.store(document, to: creds.source) else {
+            return .failure(FetchFailure("Renewed token could not be saved, \(ClaudeProvider.signInAdvice)"))
+        }
+        var renewed = creds
+        renewed.token = renewal.token
+        renewed.refreshToken = renewal.refreshToken ?? creds.refreshToken
+        renewed.expiresAt = renewal.expiresAt
+        renewed.scopes = renewal.scopes.isEmpty ? creds.scopes : renewal.scopes
+        renewed.document = document
+        return .success(renewed)
+    }
+
+    private static func takeLock() -> Bool {
+        let fm = FileManager.default
+        if (try? fm.createDirectory(at: lock, withIntermediateDirectories: false)) != nil { return true }
+        let modified = (try? fm.attributesOfItem(atPath: lock.path)[.modificationDate] as? Date) ?? .distantPast
+        guard Date().timeIntervalSince(modified) > lockStaleAfter else { return false }
+        try? fm.removeItem(at: lock)
+        return (try? fm.createDirectory(at: lock, withIntermediateDirectories: false)) != nil
+    }
+
+    private static func store(_ document: Data, to source: ClaudeProvider.Credentials.Source) async -> Bool {
+        switch source {
+        case .file(let url):
+            return (try? document.write(to: url, options: .atomic)) != nil
+                && (try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)) != nil
+        case .keychain:
+            // The same command Claude Code runs, fed over stdin so the token
+            // never shows in the process list. `-U` updates the existing
+            // item in place, keeping the access list that lets
+            // /usr/bin/security read it without a prompt.
+            let hex = document.map { String(format: "%02x", $0) }.joined()
+            let command = "add-generic-password -U -a \"\(NSUserName())\" -s \"\(ClaudeProvider.keychainService)\" -X \"\(hex)\"\n"
+            return await Subprocess.run("/usr/bin/security", ["-i"], input: Data(command.utf8)) != nil
+        }
     }
 }
 
 enum Subprocess {
     /// stdout of a short-lived command, or nil on failure or timeout.
-    static func run(_ path: String, _ args: [String], timeout: TimeInterval = 5) async -> Data? {
+    /// `input`, when given, is written to its stdin and then closed.
+    static func run(_ path: String, _ args: [String], input: Data? = nil, timeout: TimeInterval = 5) async -> Data? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 let process = Process()
@@ -148,10 +310,17 @@ enum Subprocess {
                 let stdout = Pipe()
                 process.standardOutput = stdout
                 process.standardError = FileHandle.nullDevice
-                process.standardInput = FileHandle.nullDevice
+                let stdin = input.map { _ in Pipe() }
+                process.standardInput = stdin ?? FileHandle.nullDevice
                 do { try process.run() } catch {
                     continuation.resume(returning: nil)
                     return
+                }
+                if let stdin, let input {
+                    // Small enough for the pipe buffer, so this cannot block
+                    // against the child's own output.
+                    try? stdin.fileHandleForWriting.write(contentsOf: input)
+                    try? stdin.fileHandleForWriting.close()
                 }
                 let killer = DispatchWorkItem { if process.isRunning { process.terminate() } }
                 DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)

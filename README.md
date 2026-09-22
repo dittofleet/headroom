@@ -72,13 +72,24 @@ headroom has no login of its own. It borrows the sessions you already have:
 - **Codex**: the token the Codex CLI keeps in `~/.codex/auth.json`, against
   the endpoint behind `/status`.
 
-Tokens are only ever read, and only sent to the provider they belong to.
-headroom never refreshes them, because rotating a refresh token would log
-the real tool out. When a token expires, the menu says so and the numbers
-come back the next time you use Claude Code or Codex.
+Tokens are only sent to the provider they belong to.
 
-The keychain is read through `/usr/bin/security`, which Claude Code's
-keychain item already trusts, so there is no password prompt.
+Claude Code's token lasts a few hours and is normally renewed by Claude
+Code itself, so on a Mac where Claude Code rarely runs it would sit
+expired. When that happens headroom renews it the same way Claude Code
+does: the refresh token goes to the same endpoint, and the new tokens are
+stored back in the keychain item (or `~/.claude/.credentials.json`) in the
+same shape, so Claude Code simply picks them up. It takes Claude Code's
+own refresh lock (`~/.claude/.oauth_refresh.lock`) while doing so, and
+never renews a token that is still live, so the two do not rotate the
+refresh token out from under each other. When the refresh token itself
+has been revoked, the menu says to sign in again with `claude login`.
+
+Codex's token is only ever read. When it expires the menu says so, and the
+numbers come back the next time you use Codex.
+
+The keychain is read and written through `/usr/bin/security`, which Claude
+Code's keychain item already trusts, so there is no password prompt.
 
 ## Staying out of trouble
 
