@@ -245,14 +245,14 @@ actor TokenRenewer {
             return .failure(signedOut)
         }
         // A live token the server rejects has been revoked, or the clock is
-        // off. One renewal settles which; renewing again for the token that
+        // off. One renewal settles which. Renewing again for the token that
         // renewal produced would not help, and would rotate the refresh
         // token on every poll.
         if creds.isLive(at: Date()), creds.token == lastIssued {
             return .failure(FetchFailure("Token rejected, \(ClaudeProvider.signInAdvice)"))
         }
-        // The unscoped keychain lookup is only for reading an older entry;
-        // a renewal could not be written back to it as the same item.
+        // The unscoped keychain lookup is only for reading an older entry.
+        // A renewal could not be written back to it as the same item.
         if case .keychain(account: nil) = creds.source {
             return .failure(FetchFailure("Token expired, refreshes when Claude Code next runs"))
         }
