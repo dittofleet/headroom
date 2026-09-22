@@ -9,9 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var menuIsOpen = false
-    private var iconRows: [StatusIcon.Row]?
-    private var iconBadged = false
-    private var iconNumbered = true
+    private var iconSpec: StatusIcon.Spec?
     private let updates = UpdateController()
 
     init(engine: Engine) {
@@ -57,12 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func render() {
         let now = Date()
         // Most ticks change nothing; keep the image AppKit already rasterized.
-        let rows = StatusIcon.rows(engine: engine, now: now)
-        let badged = updates.installed != nil
-        let numbered = Preferences.showNumbers
-        if rows != iconRows || badged != iconBadged || numbered != iconNumbered {
-            (iconRows, iconBadged, iconNumbered) = (rows, badged, numbered)
-            statusItem.button?.image = StatusIcon.image(rows: rows, badge: badged, numbers: numbered)
+        let spec = StatusIcon.spec(engine: engine, chrome: chrome, now: now)
+        if spec != iconSpec {
+            iconSpec = spec
+            statusItem.button?.image = StatusIcon.image(spec)
         }
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(now: now))
         if menuIsOpen { buildMenu(now: now) }

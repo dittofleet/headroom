@@ -10,7 +10,7 @@ enum Render {
         var chrome = AppDelegate(engine: engine).chrome
         if updateReady { (chrome.updateReady, chrome.about) = (true, chrome.about + " · v0.0.2 is ready") }
         let entries = menuEntries(engine: engine, chrome: chrome, now: now)
-        let icon = StatusIcon.image(rows: StatusIcon.rows(engine: engine, now: now), badge: updateReady, numbers: chrome.showNumbers)
+        let icon = StatusIcon.image(StatusIcon.spec(engine: engine, chrome: chrome, now: now))
         func height(_ entry: MenuEntry) -> CGFloat {
             switch entry {
             case .view(let view): return view.frame.height
