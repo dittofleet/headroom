@@ -134,7 +134,6 @@ enum Preferences {
 /// draws them, so the two can't drift apart.
 enum MenuEntry {
     case view(NSView)
-    case separator
     case info(String, toolTip: String? = nil)
     case action(title: String, selector: Selector, key: String = "", checked: Bool = false, tag: Int = 0)
 }
@@ -155,17 +154,17 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     var entries: [MenuEntry] = []
     for group in menuViews(engine: engine, now: now, showPace: chrome.showPace) {
         entries += group.map(MenuEntry.view)
-        entries.append(.separator)
+        entries.append(.view(SeparatorView()))
     }
     entries.append(.action(title: "Refresh Now", selector: #selector(AppDelegate.refreshNow), key: "r"))
     for (index, provider) in engine.providers.enumerated() {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
-    entries.append(.separator)
-    entries.append(.action(title: "Show Pace", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
+    entries.append(.view(SeparatorView()))
+    entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
     entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
-    entries.append(.separator)
+    entries.append(.view(SeparatorView()))
     entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
     if chrome.updateReady {
         entries.append(.action(title: "Restart to Update", selector: #selector(AppDelegate.restartToUpdate)))
@@ -193,6 +192,22 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
             views.append(NoticeView(text: wait > 0 ? "\(error) · retry in \(Format.duration(wait))" : error))
         }
         return views
+    }
+}
+
+/// A divider drawn by the app rather than the system, so it spans the same
+/// width as the rows around it. The system separator is indented to where
+/// menu item titles start, which is past where the rows begin.
+final class SeparatorView: NSView {
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 11))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        NSRect(x: MenuMetrics.inset, y: 5, width: bounds.width - MenuMetrics.inset * 2, height: 1).fill()
     }
 }
 

@@ -88,11 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for entry in menuEntries(engine: engine, chrome: chrome, now: now) {
             switch entry {
             case .view(let view):
+                // Rows and dividers only display, so keyboard navigation
+                // skips them the way it skips a system separator.
                 let item = NSMenuItem()
                 item.view = view
+                item.isEnabled = false
                 menu.addItem(item)
-            case .separator:
-                menu.addItem(.separator())
             case .info(let text, let toolTip):
                 let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
                 item.isEnabled = false
