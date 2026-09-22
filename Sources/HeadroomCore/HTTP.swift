@@ -22,42 +22,38 @@ enum HTTP {
     }
 
     /// GET returning the body on 200, or a failure that carries the server's
-    /// retry-after when it sent one.
+    /// retry-after when it sent one. `authHint` is the message for a 401 or
+    /// 403.
     static func get(_ url: URL, headers: [String: String], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
-        guard let (status, data, http) = await send(request) else {
-            return .failure(FetchFailure("Offline"))
-        }
-        switch status {
-        case 200:
-            return .success(data)
-        case 401, 403:
-            return .failure(FetchFailure(authHint))
-        default:
-            let retryAfter = http.value(forHTTPHeaderField: "retry-after").flatMap(TimeInterval.init)
-            let what = status == 429 ? "Rate limited" : "HTTP \(status)"
-            return .failure(FetchFailure(what, retryAfter: retryAfter.flatMap { $0 > 0 ? $0 : nil }))
-        }
+        return await send(request, authHint: authHint)
     }
 
-    /// POST a JSON body. Nil when the request never got an answer; otherwise
-    /// the status and body, whatever the status, since the caller reads the
-    /// error body too.
-    static func post(_ url: URL, json: [String: Any]) async -> (status: Int, body: Data)? {
+    /// POST a JSON body, with the same outcomes as `get`.
+    static func post(_ url: URL, json: [String: Any], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: json)
-        guard let (status, data, _) = await send(request) else { return nil }
-        return (status, data)
+        return await send(request, authHint: authHint)
     }
 
-    private static func send(_ request: URLRequest) async -> (Int, Data, HTTPURLResponse)? {
+    private static func send(_ request: URLRequest, authHint: String) async -> Result<Data, FetchFailure> {
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse
-        else { return nil }
-        return (http.statusCode, data, http)
+        else { return .failure(FetchFailure("Offline")) }
+        let status = http.statusCode
+        switch status {
+        case 200:
+            return .success(data)
+        case 401, 403:
+            return .failure(FetchFailure(authHint, status: status))
+        default:
+            let retryAfter = http.value(forHTTPHeaderField: "retry-after").flatMap(TimeInterval.init)
+            let what = status == 429 ? "Rate limited" : "HTTP \(status)"
+            return .failure(FetchFailure(what, retryAfter: retryAfter.flatMap { $0 > 0 ? $0 : nil }, status: status))
+        }
     }
 }
 
