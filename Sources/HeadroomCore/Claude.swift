@@ -19,20 +19,12 @@ public struct ClaudeProvider: Provider {
         guard var creds = await Self.credentials() else {
             return .failure(FetchFailure("Not signed in to Claude Code"))
         }
-        // An expired token is a guaranteed 401 that still spends the
-        // endpoint's small request quota, so renew it first.
-        var renewed = !creds.isLive(at: Date())
-        if renewed {
-            switch await TokenRenewer.shared.renew(creds) {
-            case .success(let fresh): creds = fresh
-            case .failure(let failure): return .failure(failure)
-            }
-        }
-        var result = await Self.usage(creds)
-        // A token the server rejects before its stated expiry has been
-        // revoked, or the clock is off. One renewal settles which.
-        if !renewed, case .failure(let failure) = result, failure.status == 401 {
-            renewed = true
+        // An expired token is a guaranteed 401 that would still spend the
+        // endpoint's small request quota, so it is not sent.
+        var result = creds.isLive(at: Date())
+            ? await Self.usage(creds)
+            : .failure(FetchFailure("Token expired", status: 401))
+        if case .failure(let failure) = result, failure.status == 401 {
             switch await TokenRenewer.shared.renew(creds) {
             case .success(let fresh): creds = fresh
             case .failure(let failure): return .failure(failure)
@@ -131,7 +123,7 @@ public struct ClaudeProvider: Provider {
         }
     }
 
-    static func parseCredentials(_ data: Data, source: Credentials.Source = .keychain(account: nil)) -> Credentials? {
+    static func parseCredentials(_ data: Data, source: Credentials.Source) -> Credentials? {
         guard let oauth = Parse.object(data)?["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String, !token.isEmpty
         else { return nil }
@@ -244,11 +236,25 @@ actor TokenRenewer {
     /// Refresh tokens the server has already rejected. Asking again only
     /// gets the same answer, and it stays that way until a new sign-in.
     private var dead: Set<String> = []
+    /// The access token from the last renewal.
+    private var lastIssued: String?
 
     func renew(_ creds: ClaudeProvider.Credentials) async -> Result<ClaudeProvider.Credentials, FetchFailure> {
         let signedOut = FetchFailure("Session expired, \(ClaudeProvider.signInAdvice)")
         guard let refreshToken = creds.refreshToken, !dead.contains(refreshToken) else {
             return .failure(signedOut)
+        }
+        // A live token the server rejects has been revoked, or the clock is
+        // off. One renewal settles which; renewing again for the token that
+        // renewal produced would not help, and would rotate the refresh
+        // token on every poll.
+        if creds.isLive(at: Date()), creds.token == lastIssued {
+            return .failure(FetchFailure("Token rejected, \(ClaudeProvider.signInAdvice)"))
+        }
+        // The unscoped keychain lookup is only for reading an older entry;
+        // a renewal could not be written back to it as the same item.
+        if case .keychain(account: nil) = creds.source {
+            return .failure(FetchFailure("Token expired, refreshes when Claude Code next runs"))
         }
         guard Self.takeLock() else {
             return .failure(FetchFailure("Token expired, Claude Code is renewing it"))
@@ -268,7 +274,7 @@ actor TokenRenewer {
         switch await HTTP.post(Self.tokenURL, json: body, authHint: signedOut.message) {
         case .success(let body):
             data = body
-        case .failure(let failure) where failure.status == 400 || failure.status == 401:
+        case .failure(let failure) where failure.status == 401 || Self.isInvalidGrant(failure):
             dead.insert(refreshToken)
             return .failure(signedOut)
         case .failure(let failure):
@@ -287,11 +293,19 @@ actor TokenRenewer {
         else {
             return .failure(FetchFailure("Renewed token could not be saved, \(ClaudeProvider.signInAdvice)"))
         }
+        lastIssued = renewed.token
         return .success(renewed)
+    }
+
+    /// The refresh token itself is gone: revoked, superseded, or expired. Any
+    /// other 400 is about the request and not the session.
+    private static func isInvalidGrant(_ failure: FetchFailure) -> Bool {
+        failure.status == 400 && failure.body.flatMap(Parse.object).map { $0["error"] as? String == "invalid_grant" } ?? false
     }
 
     private static func takeLock() -> Bool {
         let fm = FileManager.default
+        try? fm.createDirectory(at: lock.deletingLastPathComponent(), withIntermediateDirectories: true)
         func create() -> Bool { (try? fm.createDirectory(at: lock, withIntermediateDirectories: false)) != nil }
         if create() { return true }
         let modified = (try? fm.attributesOfItem(atPath: lock.path)[.modificationDate] as? Date) ?? .distantPast
@@ -303,8 +317,8 @@ actor TokenRenewer {
     private static func store(_ document: Data, to source: ClaudeProvider.Credentials.Source) async -> Bool {
         switch source {
         case .file(let url):
-            return (try? document.write(to: url, options: .atomic)) != nil
-                && (try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)) != nil
+            // Owner-only from the first byte, as Claude Code writes it.
+            return FileManager.default.createFile(atPath: url.path, contents: document, attributes: [.posixPermissions: 0o600])
         case .keychain(let account):
             // The same command Claude Code runs, fed over stdin so the token
             // never shows in the process list. `-U` updates the existing

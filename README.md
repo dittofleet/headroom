@@ -81,9 +81,10 @@ does: the refresh token goes to the same endpoint, and the new tokens are
 stored back in the keychain item (or `~/.claude/.credentials.json`) in the
 same shape, so Claude Code simply picks them up. It takes Claude Code's
 own refresh lock (`~/.claude/.oauth_refresh.lock`) while doing so, and
-never renews a token that is still live, so the two do not rotate the
-refresh token out from under each other. When the refresh token itself
-has been revoked, the menu says to sign in again with `claude login`.
+leaves a live token alone unless the server rejects it, so the two do not
+rotate the refresh token out from under each other. When the refresh
+token itself has been revoked, the menu says to sign in again with
+`claude login`.
 
 Codex's token is only ever read. When it expires the menu says so, and the
 numbers come back the next time you use Codex.

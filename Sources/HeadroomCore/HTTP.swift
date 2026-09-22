@@ -48,11 +48,11 @@ enum HTTP {
         case 200:
             return .success(data)
         case 401, 403:
-            return .failure(FetchFailure(authHint, status: status))
+            return .failure(FetchFailure(authHint, status: status, body: data))
         default:
             let retryAfter = http.value(forHTTPHeaderField: "retry-after").flatMap(TimeInterval.init)
             let what = status == 429 ? "Rate limited" : "HTTP \(status)"
-            return .failure(FetchFailure(what, retryAfter: retryAfter.flatMap { $0 > 0 ? $0 : nil }, status: status))
+            return .failure(FetchFailure(what, retryAfter: retryAfter.flatMap { $0 > 0 ? $0 : nil }, status: status, body: data))
         }
     }
 }
