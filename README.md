@@ -5,9 +5,8 @@ A simple menu bar app for your Claude and Codex usage limits.
 <img src="docs/menu.png" width="270" alt="The headroom menu">
 
 The menu bar shows one row per provider: how much of the current session
-window is used. If any other window (weekly, model-scoped) passes 90%, that
-one takes the row instead, since it is the one about to stop you. Rows turn
-orange at 75% and red at 90%. "Show Numbers in Menu Bar" drops the
+window is used. The other windows (weekly, model-scoped) are in the menu.
+Rows turn orange at 75% and red at 90%. "Show Numbers in Menu Bar" drops the
 percentages and leaves just the bars, for a narrower icon.
 
 Click for every limit, when each resets, and a pace tick on each bar: the

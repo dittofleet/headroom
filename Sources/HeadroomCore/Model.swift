@@ -62,12 +62,11 @@ public struct Snapshot: Codable, Equatable, Sendable {
         limits.compactMap(\.resetsAt).filter { $0 > fetchedAt }.min()
     }
 
-    /// The one number worth showing in the menu bar: the session window,
-    /// unless some other window is nearly exhausted and is the real blocker.
+    /// The one number worth showing in the menu bar: the session window.
+    /// Falls back to the fullest window when the provider has no session.
     public func headline(at now: Date) -> Limit? {
-        let worst = limits.max { $0.percent(at: now) < $1.percent(at: now) }
-        if let worst, worst.percent(at: now) >= Limit.criticalPercent { return worst }
-        return limits.first { $0.kind == .session } ?? worst
+        limits.first { $0.kind == .session }
+            ?? limits.max { $0.percent(at: now) < $1.percent(at: now) }
     }
 }
 
