@@ -133,12 +133,11 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(limit.elapsedFraction(at: now.addingTimeInterval(3601)) == nil)
 }
 
-@Test func headlinePrefersSessionUntilSomethingIsNearlyOut() {
+@Test func headlineIsAlwaysTheSession() {
     let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
-    var weekly = Limit(kind: .weekly, label: "Weekly", percent: 85, resetsAt: nil, windowSeconds: nil)
+    let weekly = Limit(kind: .weekly, label: "Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
     #expect(Snapshot(limits: [session, weekly], plan: nil, fetchedAt: now).headline(at: now) == session)
-    weekly.percent = 95
-    #expect(Snapshot(limits: [session, weekly], plan: nil, fetchedAt: now).headline(at: now) == weekly)
+    #expect(Snapshot(limits: [weekly], plan: nil, fetchedAt: now).headline(at: now) == weekly)
 }
 
 @Test func formatting() {
