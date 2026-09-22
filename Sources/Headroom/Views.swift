@@ -28,9 +28,18 @@ enum StatusIcon {
         var stale: Bool
     }
 
+    /// Everything the icon is drawn from. Equal specs draw the same image.
+    struct Spec: Equatable {
+        var rows: [Row]
+        /// A dot: an update is installed and waiting for a restart.
+        var badge: Bool
+        /// The percentage after each bar.
+        var numbers: Bool
+    }
+
     @MainActor
-    static func rows(engine: Engine, now: Date) -> [Row] {
-        engine.providers.map { provider in
+    static func spec(engine: Engine, chrome: MenuChrome, now: Date) -> Spec {
+        let rows = engine.providers.map { provider -> Row in
             let snapshot = engine.state(provider).snapshot
             return Row(
                 glyph: provider.glyph,
@@ -38,15 +47,22 @@ enum StatusIcon {
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
+        return Spec(rows: rows, badge: chrome.updateReady, numbers: chrome.showNumbers)
     }
 
-    /// `badge` adds a dot: an update is installed and waiting for a restart.
-    static func image(rows: [Row], badge: Bool = false) -> NSImage {
+    static func image(_ spec: Spec) -> NSImage {
+        let rows = spec.rows
         let rowHeight: CGFloat = rows.count > 1 ? 10 : 14
         let fontSize: CGFloat = rows.count > 1 ? 9 : 11
-        let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, numberWidth: CGFloat = fontSize * 2.1
-        let badgeWidth: CGFloat = badge ? 7 : 0
-        let size = NSSize(width: glyphWidth + barWidth + 4 + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
+        let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold)
+        let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, gap: CGFloat = 3
+        let badgeWidth: CGFloat = spec.badge ? 7 : 0
+        let texts = rows.map { row in row.percent.map { "\(Format.wholePercent($0))" } ?? "–" }
+        let textSizes = texts.map { ($0 as NSString).size(withAttributes: [.font: font]) }
+        // Sized to the widest number showing, so a "9" sits as close to its
+        // bar as a "74" does. The width only moves when a digit comes or goes.
+        let numberWidth: CGFloat = spec.numbers ? gap + ceil(textSizes.map(\.width).max() ?? 0) : 0
+        let size = NSSize(width: glyphWidth + barWidth + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
 
         let image = NSImage(size: size, flipped: false) { _ in
@@ -55,7 +71,7 @@ enum StatusIcon {
                 let color = levels[index].color ?? .black
                 let alpha: CGFloat = row.stale || row.percent == nil ? 0.45 : 1
                 let attributes: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold),
+                    .font: font,
                     .foregroundColor: color.withAlphaComponent(alpha),
                 ]
 
@@ -66,11 +82,11 @@ enum StatusIcon {
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
                 drawBar(in: track, percent: row.percent ?? 0, track: color.withAlphaComponent(0.25 * alpha), fill: color.withAlphaComponent(alpha), minFill: 2)
 
-                let text = row.percent.map { "\(Format.wholePercent($0))" } ?? "–"
-                let number = NSAttributedString(string: text, attributes: attributes)
-                number.draw(at: NSPoint(x: size.width - badgeWidth - number.size().width, y: y + (rowHeight - number.size().height) / 2))
+                if spec.numbers {
+                    (texts[index] as NSString).draw(at: NSPoint(x: track.maxX + gap, y: y + (rowHeight - textSizes[index].height) / 2), withAttributes: attributes)
+                }
             }
-            if badge {
+            if spec.badge {
                 NSColor.black.setFill()
                 NSBezierPath(ovalIn: NSRect(x: size.width - 4, y: (size.height - 4) / 2, width: 4, height: 4)).fill()
             }
@@ -96,10 +112,21 @@ private func drawBar(in track: NSRect, percent: Double, track trackColor: NSColo
 }
 
 enum Preferences {
-    /// The pace tick on each bar. On unless switched off.
+    /// The pace tick on each bar.
     static var showPace: Bool {
-        get { UserDefaults.standard.object(forKey: "showPace") as? Bool ?? true }
+        get { flag("showPace") }
         set { UserDefaults.standard.set(newValue, forKey: "showPace") }
+    }
+
+    /// The percentages in the menu bar icon.
+    static var showNumbers: Bool {
+        get { flag("showNumbers") }
+        set { UserDefaults.standard.set(newValue, forKey: "showNumbers") }
+    }
+
+    /// On unless switched off.
+    private static func flag(_ key: String) -> Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? true
     }
 }
 
@@ -120,6 +147,7 @@ struct MenuChrome {
     var canUpdate: Bool
     var startAtLogin: Bool
     var showPace: Bool
+    var showNumbers: Bool
 }
 
 @MainActor
@@ -135,6 +163,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     }
     entries.append(.separator)
     entries.append(.action(title: "Show Pace", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
+    entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
     entries.append(.separator)
     entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))

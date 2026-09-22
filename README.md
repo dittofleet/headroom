@@ -7,7 +7,8 @@ A simple menu bar app for your Claude and Codex usage limits.
 The menu bar shows one row per provider: how much of the current session
 window is used. If any other window (weekly, model-scoped) passes 90%, that
 one takes the row instead, since it is the one about to stop you. Rows turn
-orange at 75% and red at 90%.
+orange at 75% and red at 90%. "Show Numbers in Menu Bar" drops the
+percentages and leaves just the bars, for a narrower icon.
 
 Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick
@@ -15,7 +16,7 @@ means you are burning faster than the window refills. "Show Pace" in the menu
 hides the ticks if you would rather not see them.
 
 It does one thing and is simple about it: no login flow, no dependencies,
-and two checkboxes for settings. It borrows the sessions Claude Code and Codex already have,
+and three checkboxes for settings. It borrows the sessions Claude Code and Codex already have,
 shows you the numbers, and otherwise stays out of the way. Being a single
 small native binary is a side effect of that.
 
