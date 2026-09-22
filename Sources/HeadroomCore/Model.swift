@@ -75,10 +75,15 @@ public struct FetchFailure: Error, Sendable {
     public var message: String
     /// Server-mandated cooldown. Never fetch before it passes.
     public var retryAfter: TimeInterval?
+    /// HTTP status and body, when the server answered.
+    public var status: Int?
+    var body: Data?
 
-    public init(_ message: String, retryAfter: TimeInterval? = nil) {
+    public init(_ message: String, retryAfter: TimeInterval? = nil, status: Int? = nil, body: Data? = nil) {
         self.message = message
         self.retryAfter = retryAfter
+        self.status = status
+        self.body = body
     }
 }
 
