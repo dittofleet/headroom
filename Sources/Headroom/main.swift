@@ -9,6 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var menuIsOpen = false
+    /// Open submenus, i.e. Settings. A rebuild would pull one out from
+    /// under the pointer, so it waits until they close.
+    private var openSubmenus = 0
+    private var menuIsBehind = false
     private var iconSpec: StatusIcon.Spec?
     private let updates = UpdateController()
 
@@ -60,14 +64,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             iconSpec = spec
             statusItem.button?.image = StatusIcon.image(spec)
         }
-        statusItem.button?.setAccessibilityLabel(accessibilitySummary(now: now))
-        if menuIsOpen { buildMenu(now: now) }
+        statusItem.button?.setAccessibilityLabel(accessibilitySummary(spec))
+        if menuIsOpen { openSubmenus == 0 ? buildMenu(now: now) : (menuIsBehind = true) }
     }
 
-    private func accessibilitySummary(now: Date) -> String {
-        engine.providers.map { provider in
-            let headline = engine.state(provider).snapshot?.headline(at: now)
-            return "\(provider.name) \(headline.map { Format.percent($0.percent(at: now)) } ?? "unknown")"
+    /// Reads out what the icon shows.
+    private func accessibilitySummary(_ spec: StatusIcon.Spec) -> String {
+        zip(engine.providers, spec.rows).map { provider, row in
+            [provider.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
         }.joined(separator: ", ")
     }
 
@@ -79,13 +83,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             canUpdate: updates.canUpdate,
             startAtLogin: LoginItem.isEnabled,
             showPace: Preferences.showPace,
-            showNumbers: Preferences.showNumbers
+            showNumbers: Preferences.showNumbers,
+            menuBarLimits: Preferences.menuBarLimits
         )
     }
 
     private func buildMenu(now: Date) {
+        menuIsBehind = false
         menu.removeAllItems()
-        for entry in menuEntries(engine: engine, chrome: chrome, now: now) {
+        fill(menu, with: menuEntries(engine: engine, chrome: chrome, now: now))
+    }
+
+    private func fill(_ menu: NSMenu, with entries: [MenuEntry]) {
+        for entry in entries {
             switch entry {
             case .view(let view):
                 // Rows and dividers only display, so keyboard navigation
@@ -105,6 +115,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 item.state = checked ? .on : .off
                 item.tag = tag
                 menu.addItem(item)
+            case .submenu(let title, let entries):
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                let submenu = NSMenu(title: title)
+                submenu.autoenablesItems = false
+                submenu.delegate = self
+                fill(submenu, with: entries)
+                item.submenu = submenu
+                menu.addItem(item)
+            case .separator:
+                menu.addItem(.separator())
             }
         }
     }
@@ -112,7 +132,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Menu
 
     func menuWillOpen(_ menu: NSMenu) {
+        guard menu === self.menu else {
+            openSubmenus += 1
+            return
+        }
         menuIsOpen = true
+        openSubmenus = 0
         buildMenu(now: Date())
         // Looking is the moment freshness matters; still bounded by the
         // engine's floor and any server cooldown.
@@ -120,6 +145,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuDidClose(_ menu: NSMenu) {
+        guard menu === self.menu else {
+            openSubmenus = max(openSubmenus - 1, 0)
+            if menuIsOpen && openSubmenus == 0 && menuIsBehind { buildMenu(now: Date()) }
+            return
+        }
         menuIsOpen = false
     }
 
@@ -133,6 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func toggleShowNumbers() {
         Preferences.showNumbers.toggle()
+        render()
+    }
+
+    /// The item's title is the limit's label, and its tag the provider.
+    @objc func chooseMenuBarLimit(_ sender: NSMenuItem) {
+        Preferences.menuBarLimits[engine.providers[sender.tag].id] = sender.title
         render()
     }
 

@@ -14,7 +14,8 @@ enum Render {
         func height(_ entry: MenuEntry) -> CGFloat {
             switch entry {
             case .view(let view): return view.frame.height
-            case .info, .action: return 22
+            case .info, .action, .submenu: return 22
+            case .separator: return 11
             }
         }
 
@@ -75,6 +76,12 @@ enum Render {
                     if checked { text("✓", x: 9, color: .labelColor) }
                     text(title, x: 26, color: .labelColor)
                     if !key.isEmpty { text("⌘\(key.uppercased())", x: size.width - MenuMetrics.inset, color: .tertiaryLabelColor, rightAligned: true) }
+                case .separator:
+                    NSColor.separatorColor.setFill()
+                    NSRect(x: MenuMetrics.inset, y: y + 5, width: size.width - MenuMetrics.inset * 2, height: 1).fill()
+                case .submenu(let title, _):
+                    text(title, x: 26, color: .labelColor)
+                    text("›", x: size.width - MenuMetrics.inset, color: .secondaryLabelColor, rightAligned: true)
                 }
             }
         }

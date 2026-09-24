@@ -62,10 +62,12 @@ public struct Snapshot: Codable, Equatable, Sendable {
         limits.compactMap(\.resetsAt).filter { $0 > fetchedAt }.min()
     }
 
-    /// The one number worth showing in the menu bar: the session window.
-    /// Falls back to the fullest window when the provider has no session.
-    public func headline(at now: Date) -> Limit? {
-        limits.first { $0.kind == .session }
+    /// The one number worth showing in the menu bar: the window with the
+    /// chosen label, else the session window. Falls back to the fullest
+    /// window when the provider has neither.
+    public func headline(at now: Date, preferring label: String? = nil) -> Limit? {
+        limits.first { $0.label == label }
+            ?? limits.first { $0.kind == .session }
             ?? limits.max { $0.percent(at: now) < $1.percent(at: now) }
     }
 }
