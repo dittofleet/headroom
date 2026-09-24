@@ -67,7 +67,22 @@ public struct CodexProvider: Provider {
         }
 
         guard !limits.isEmpty else { return nil }
-        return Snapshot(limits: limits, plan: (root["plan_type"] as? String)?.capitalized, fetchedAt: now)
+        return Snapshot(limits: limits, plan: planName(root["plan_type"] as? String), fetchedAt: now)
+    }
+
+    /// ChatGPT's plan ids are internal names, several to a product.
+    static func planName(_ id: String?) -> String? {
+        guard let id, !id.isEmpty else { return nil }
+        switch id {
+        case "unknown": return nil
+        case "free_workspace": return "Free"
+        case "prolite": return "Pro Lite"
+        case "self_serve_business_usage_based": return "Business"
+        case "self_serve_business_prolite": return "Business Pro Lite"
+        case "ent26", "enterprise_cbp_automation", "enterprise_cbp_usage_based": return "Enterprise"
+        case "education": return "Edu"
+        default: return Format.title(id)
+        }
     }
 
     private static func describe(_ seconds: Double?) -> (Limit.Kind, String) {
