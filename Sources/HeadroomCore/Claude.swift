@@ -79,7 +79,7 @@ public struct ClaudeProvider: Provider {
                 limits.append(Limit(kind: .weekly, label: "Weekly · \(label.isEmpty ? "scoped" : label)", percent: percent, resetsAt: resetsAt, windowSeconds: weeklyWindow))
             default:
                 let window: Double? = (entry["group"] as? String) == "weekly" ? weeklyWindow : nil
-                limits.append(Limit(kind: .other, label: kind.replacingOccurrences(of: "_", with: " ").capitalized, percent: percent, resetsAt: resetsAt, windowSeconds: window))
+                limits.append(Limit(kind: .other, label: Format.title(kind), percent: percent, resetsAt: resetsAt, windowSeconds: window))
             }
         }
 
@@ -133,10 +133,24 @@ public struct ClaudeProvider: Provider {
             refreshToken: (oauth["refreshToken"] as? String).flatMap { $0.isEmpty ? nil : $0 },
             scopes: oauth["scopes"] as? [String] ?? [],
             expiresAt: expiresAt,
-            plan: (oauth["subscriptionType"] as? String)?.capitalized,
+            plan: planName(oauth["subscriptionType"] as? String, tier: oauth["rateLimitTier"] as? String),
             document: data,
             source: source
         )
+    }
+
+    /// Max comes in sizes, and a Team seat can be a premium one. The rate
+    /// limit tier is what tells them apart.
+    static func planName(_ subscription: String?, tier: String?) -> String? {
+        guard let subscription, !subscription.isEmpty else { return nil }
+        switch (subscription, tier) {
+        case ("max", let tier?):
+            // "default_claude_max_20x" is "Max 20x".
+            let size = tier.split(separator: "_").last ?? ""
+            return size.count > 1 && size.hasSuffix("x") && size.dropLast().allSatisfy(\.isNumber) ? "Max \(size)" : "Max"
+        case ("team", "default_claude_max_5x"): return "Team Premium"
+        default: return Format.title(subscription)
+        }
     }
 
     static let keychainService = "Claude Code-credentials"

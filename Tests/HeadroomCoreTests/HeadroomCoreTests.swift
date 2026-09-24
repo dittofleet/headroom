@@ -65,6 +65,22 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(ClaudeProvider.parseCredentials(Data(#"{"claudeAiOauth": {}}"#.utf8), source: .keychain(account: "me")) == nil)
 }
 
+@Test func planNames() {
+    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_20x") == "Max 20x")
+    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_40x") == "Max 40x")
+    #expect(ClaudeProvider.planName("max", tier: nil) == "Max")
+    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_20x_v2") == "Max")
+    #expect(ClaudeProvider.planName("team", tier: "default_claude_max_5x") == "Team Premium")
+    #expect(ClaudeProvider.planName("enterprise", tier: "whatever") == "Enterprise")
+    #expect(ClaudeProvider.planName("", tier: nil) == nil)
+    #expect(CodexProvider.planName("self_serve_business_prolite") == "Business Pro Lite")
+    #expect(CodexProvider.planName("prolite") == "Pro Lite")
+    #expect(CodexProvider.planName("ent26") == "Enterprise")
+    #expect(CodexProvider.planName("edu_plus") == "Edu Plus")
+    #expect(CodexProvider.planName("some_NEW_plan_4o") == "Some New Plan 4o")
+    #expect(CodexProvider.planName("unknown") == nil)
+}
+
 @Test func claudeRenewalResponse() throws {
     let renewal = try #require(ClaudeProvider.parseRenewal(Data(
         #"{"token_type": "Bearer", "access_token": "new", "expires_in": 28800, "refresh_token": "", "refresh_token_expires_in": 2592000, "scope": "user:inference user:profile"}"#.utf8), now: now))
@@ -96,7 +112,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 
     // The renewed credentials read back like the originals did.
     let creds = try #require(ClaudeProvider.parseCredentials(document, source: .keychain(account: "me")))
-    #expect(creds.token == "new" && creds.refreshToken == "r2" && creds.expiresAt == now && creds.plan == "Max")
+    #expect(creds.token == "new" && creds.refreshToken == "r2" && creds.expiresAt == now && creds.plan == "Max 5x")
 
     // Without a new refresh token, the stored one stays.
     let kept = try #require(ClaudeProvider.renewedDocument(stored, with: ClaudeProvider.Renewal(token: "n", refreshToken: nil, expiresAt: now, refreshTokenExpiresAt: nil, scopes: [])))

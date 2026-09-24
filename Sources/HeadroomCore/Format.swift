@@ -31,6 +31,12 @@ public enum Format {
         return "Resets \(formatter.string(from: resetsAt)) · in \(duration(resetsAt.timeIntervalSince(now)))"
     }
 
+    /// An id with no name of its own, readable anyway: "edu_plus" is "Edu Plus".
+    public static func title(_ id: String) -> String {
+        // Not `capitalized`, which would make "4o" "4O".
+        id.split(separator: "_").map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }.joined(separator: " ")
+    }
+
     public static func age(_ date: Date, now: Date) -> String {
         let seconds = now.timeIntervalSince(date)
         return seconds < 90 ? "just now" : "\(duration(seconds)) ago"

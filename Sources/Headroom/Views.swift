@@ -64,11 +64,16 @@ enum StatusIcon {
         let numberWidth: CGFloat = spec.numbers ? gap + ceil(textSizes.map(\.width).max() ?? 0) : 0
         let size = NSSize(width: glyphWidth + barWidth + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
+        // What the system would tint the icon, for when it can't. The drawing
+        // handler runs again whenever the menu bar turns light or dark.
+        let plain = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .white : .black
+        }
 
         let image = NSImage(size: size, flipped: false) { _ in
             for (index, row) in rows.enumerated() {
                 let y = size.height - rowHeight * CGFloat(index + 1)
-                let color = levels[index].color ?? .black
+                let color = levels[index].color ?? plain
                 let alpha: CGFloat = row.stale || row.percent == nil ? 0.45 : 1
                 let attributes: [NSAttributedString.Key: Any] = [
                     .font: font,
@@ -87,7 +92,7 @@ enum StatusIcon {
                 }
             }
             if spec.badge {
-                NSColor.black.setFill()
+                plain.setFill()
                 NSBezierPath(ovalIn: NSRect(x: size.width - 4, y: (size.height - 4) / 2, width: 4, height: 4)).fill()
             }
             return true
@@ -259,8 +264,12 @@ final class HeaderView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
-        title.draw(at: NSPoint(x: MenuMetrics.inset, y: 3))
-        detail.draw(at: NSPoint(x: bounds.width - MenuMetrics.inset - detail.size().width, y: 4))
+        let detailWidth = detail.size().width
+        detail.draw(at: NSPoint(x: bounds.width - MenuMetrics.inset - detailWidth, y: 4))
+        // A long plan name gives way to the freshness rather than running into it.
+        let titleWidth = bounds.width - MenuMetrics.inset * 2 - detailWidth - 8
+        title.draw(with: NSRect(x: MenuMetrics.inset, y: 3, width: titleWidth, height: title.size().height),
+                   options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 }
 
