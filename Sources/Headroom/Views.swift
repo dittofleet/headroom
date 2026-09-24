@@ -148,6 +148,9 @@ enum MenuEntry {
     case info(String, toolTip: String? = nil)
     case action(title: String, selector: Selector, key: String = "", checked: Bool = false, tag: Int = 0)
     case submenu(title: String, entries: [MenuEntry])
+    /// The system divider, for submenus. They have no custom rows to line
+    /// up with, and a SeparatorView would stretch them to the menu's width.
+    case separator
 }
 
 /// The parts of the menu that don't come from the engine.
@@ -187,9 +190,8 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
 
 @MainActor
 func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
-    var entries: [MenuEntry] = []
-    let choices = menuBarChoices(engine: engine, chrome: chrome, now: now)
-    if !choices.isEmpty { entries.append(.submenu(title: "Menu Bar Shows", entries: choices)) }
+    var entries = menuBarChoices(engine: engine, chrome: chrome, now: now)
+    if !entries.isEmpty { entries.append(.separator) }
     entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
@@ -204,7 +206,7 @@ func menuBarChoices(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry
     for (index, provider) in engine.providers.enumerated() {
         guard let snapshot = engine.state(provider).snapshot else { continue }
         let showing = snapshot.headline(at: now, preferring: chrome.menuBarLimits[provider.id])
-        entries.append(.info(provider.name))
+        entries.append(.info("\(provider.name) in Menu Bar"))
         entries += snapshot.limits.map { limit in
             .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit == showing, tag: index)
         }

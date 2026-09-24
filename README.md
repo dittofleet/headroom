@@ -5,11 +5,11 @@ A simple menu bar app for your Claude and Codex usage limits.
 <img src="docs/menu.png" width="270" alt="The headroom menu">
 
 The menu bar shows one row per provider: how much of the current session
-window is used. Settings › Menu Bar Shows picks a different window per
-provider instead, such as Claude's weekly or a model-scoped weekly limit,
-and every window is still listed in the menu. Rows turn orange at 75% and
-red at 90%. "Show Numbers in Menu Bar" drops the percentages and leaves
-just the bars, for a narrower icon.
+window is used. Settings lets you pick a different window per provider,
+such as Claude's weekly or a model-scoped weekly limit, and every window
+is still listed in the menu. Rows turn orange at 75% and red at 90%.
+"Show Numbers in Menu Bar" drops the percentages and leaves just the bars,
+for a narrower icon.
 
 Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick

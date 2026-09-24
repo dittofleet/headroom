@@ -9,8 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var menuIsOpen = false
-    /// Settings and its submenu. A rebuild would pull them out from under
-    /// the pointer, so it waits until they close.
+    /// Open submenus, i.e. Settings. A rebuild would pull one out from
+    /// under the pointer, so it waits until they close.
     private var openSubmenus = 0
     private var menuIsBehind = false
     private var iconSpec: StatusIcon.Spec?
@@ -123,6 +123,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 fill(submenu, with: entries)
                 item.submenu = submenu
                 menu.addItem(item)
+            case .separator:
+                menu.addItem(.separator())
             }
         }
     }
