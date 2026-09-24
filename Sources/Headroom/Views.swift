@@ -18,12 +18,14 @@ enum Level {
 }
 
 /// The menu bar icon: one row per provider with its letter, a bar, and the
-/// headline percentage. Two stacked rows keep it narrow enough for notched
+/// percentage of the limit chosen for it. Two stacked rows keep it narrow enough for notched
 /// displays.
 enum StatusIcon {
     struct Row: Equatable {
         var glyph: String
-        /// nil when there is no data at all.
+        /// The limit showing, and how much of it is used. nil when there is
+        /// no data at all.
+        var label: String?
         var percent: Double?
         var stale: Bool
     }
@@ -41,9 +43,11 @@ enum StatusIcon {
     static func spec(engine: Engine, chrome: MenuChrome, now: Date) -> Spec {
         let rows = engine.providers.map { provider -> Row in
             let snapshot = engine.state(provider).snapshot
+            let headline = snapshot?.headline(at: now, preferring: chrome.menuBarLimits[provider.id])
             return Row(
                 glyph: provider.glyph,
-                percent: snapshot?.headline(at: now)?.percent(at: now),
+                label: headline?.label,
+                percent: headline?.percent(at: now),
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
@@ -124,6 +128,13 @@ enum Preferences {
         set { UserDefaults.standard.set(newValue, forKey: "showNumbers") }
     }
 
+    /// The label of the limit each provider shows in the menu bar icon, by
+    /// provider id. A provider without one shows its session.
+    static var menuBarLimits: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "menuBarLimits") as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "menuBarLimits") }
+    }
+
     /// On unless switched off.
     private static func flag(_ key: String) -> Bool {
         UserDefaults.standard.object(forKey: key) as? Bool ?? true
@@ -136,6 +147,7 @@ enum MenuEntry {
     case view(NSView)
     case info(String, toolTip: String? = nil)
     case action(title: String, selector: Selector, key: String = "", checked: Bool = false, tag: Int = 0)
+    case submenu(title: String, entries: [MenuEntry])
 }
 
 /// The parts of the menu that don't come from the engine.
@@ -147,6 +159,7 @@ struct MenuChrome {
     var startAtLogin: Bool
     var showPace: Bool
     var showNumbers: Bool
+    var menuBarLimits: [String: String]
 }
 
 @MainActor
@@ -160,10 +173,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     for (index, provider) in engine.providers.enumerated() {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
-    entries.append(.view(SeparatorView()))
-    entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
-    entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
-    entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
+    entries.append(.submenu(title: "Settings", entries: settingsEntries(engine: engine, chrome: chrome, now: now)))
     entries.append(.view(SeparatorView()))
     entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
     if chrome.updateReady {
@@ -172,6 +182,33 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
         entries.append(.action(title: "Check for Updates", selector: #selector(AppDelegate.checkForUpdates)))
     }
     entries.append(.action(title: "Quit Headroom", selector: #selector(AppDelegate.quit), key: "q"))
+    return entries
+}
+
+@MainActor
+func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
+    var entries: [MenuEntry] = []
+    let choices = menuBarChoices(engine: engine, chrome: chrome, now: now)
+    if !choices.isEmpty { entries.append(.submenu(title: "Menu Bar Shows", entries: choices)) }
+    entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
+    entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
+    entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
+    return entries
+}
+
+/// The limits each provider could show in the menu bar, under a heading per
+/// provider, with a check on the one showing now.
+@MainActor
+func menuBarChoices(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
+    var entries: [MenuEntry] = []
+    for (index, provider) in engine.providers.enumerated() {
+        guard let snapshot = engine.state(provider).snapshot else { continue }
+        let showing = snapshot.headline(at: now, preferring: chrome.menuBarLimits[provider.id])
+        entries.append(.info(provider.name))
+        entries += snapshot.limits.map { limit in
+            .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit == showing, tag: index)
+        }
+    }
     return entries
 }
 

@@ -140,6 +140,20 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(Snapshot(limits: [weekly], plan: nil, fetchedAt: now).headline(at: now) == weekly)
 }
 
+@Test func headlineFollowsTheChosenLimit() {
+    let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
+    let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
+    let scoped = Limit(kind: .weekly, label: "Weekly · Fable", percent: 95, resetsAt: nil, windowSeconds: nil)
+    let snapshot = Snapshot(limits: [session, weekly, scoped], plan: nil, fetchedAt: now)
+    #expect(snapshot.headline(at: now, preferring: "Weekly") == weekly)
+    #expect(snapshot.headline(at: now, preferring: "Weekly · Fable") == scoped)
+    // A choice the provider no longer reports falls back to the session.
+    #expect(snapshot.headline(at: now, preferring: "Weekly · Opus") == session)
+    // Without a session either, it is the fullest window.
+    let noSession = Snapshot(limits: [weekly, scoped], plan: nil, fetchedAt: now)
+    #expect(noSession.headline(at: now, preferring: "Weekly · Opus") == scoped)
+}
+
 @Test func formatting() {
     #expect(Format.duration(59) == "now")
     #expect(Format.duration(44 * 60) == "44m")

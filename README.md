@@ -5,17 +5,19 @@ A simple menu bar app for your Claude and Codex usage limits.
 <img src="docs/menu.png" width="270" alt="The headroom menu">
 
 The menu bar shows one row per provider: how much of the current session
-window is used. The other windows (weekly, model-scoped) are in the menu.
-Rows turn orange at 75% and red at 90%. "Show Numbers in Menu Bar" drops the
-percentages and leaves just the bars, for a narrower icon.
+window is used. Settings › Menu Bar Shows picks a different window per
+provider instead, such as Claude's weekly or a model-scoped weekly limit,
+and every window is still listed in the menu. Rows turn orange at 75% and
+red at 90%. "Show Numbers in Menu Bar" drops the percentages and leaves
+just the bars, for a narrower icon.
 
 Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick
 means you are burning faster than the window refills. "Show Pace Marker" in
-the menu hides the ticks if you would rather not see them.
+Settings hides the ticks if you would rather not see them.
 
 It does one thing and is simple about it: no login flow, no dependencies,
-and three checkboxes for settings. It borrows the sessions Claude Code and Codex already have,
+and a short Settings submenu. It borrows the sessions Claude Code and Codex already have,
 shows you the numbers, and otherwise stays out of the way. Being a single
 small native binary is a side effect of that.
 
@@ -28,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/install.sh
 Releases are universal, signed with a Developer ID, and notarized.
 
 This puts `Headroom.app` in `/Applications`, opens it, and turns on
-**Start at Login**, which you can switch off and on from the menu.
+**Start at Login**, which you can switch off and on under Settings.
 
 If you download `Headroom.zip` from a release instead, drag the app to
 `/Applications`, open it, and tick Start at Login yourself. To build from a
