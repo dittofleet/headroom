@@ -16,7 +16,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
      ]}
     """
     let snapshot = try #require(ClaudeProvider.parse(Data(json.utf8), now: now))
-    #expect(snapshot.limits.map(\.label) == ["Session", "Weekly", "Weekly · Fable"])
+    #expect(snapshot.limits.map(\.label) == ["Session", "Weekly", "Fable Weekly"])
     #expect(snapshot.limits.map(\.percent) == [47, 49, 63])
     #expect(snapshot.limits[0].resetsAt == Date(timeIntervalSince1970: 1_789_879_200))
     #expect(snapshot.limits[0].windowSeconds == 18000)
@@ -51,7 +51,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     """
     let snapshot = try #require(CodexProvider.parse(Data(json.utf8), now: now))
     #expect(snapshot.plan == "Plus")
-    #expect(snapshot.limits.map(\.label) == ["Session", "Weekly", "Code review · Weekly"])
+    #expect(snapshot.limits.map(\.label) == ["Session", "Weekly", "Code review Weekly"])
     #expect(snapshot.limits.map(\.kind) == [.session, .weekly, .other])
     #expect(snapshot.limits[1].resetsAt == Date(timeIntervalSince1970: 1_789_925_529))
 }
@@ -143,15 +143,15 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 @Test func headlineFollowsTheChosenLimit() {
     let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
     let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
-    let scoped = Limit(kind: .weekly, label: "Weekly · Fable", percent: 95, resetsAt: nil, windowSeconds: nil)
+    let scoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
     let snapshot = Snapshot(limits: [session, weekly, scoped], plan: nil, fetchedAt: now)
     #expect(snapshot.headline(at: now, preferring: "Weekly") == weekly)
-    #expect(snapshot.headline(at: now, preferring: "Weekly · Fable") == scoped)
+    #expect(snapshot.headline(at: now, preferring: "Fable Weekly") == scoped)
     // A choice the provider no longer reports falls back to the session.
-    #expect(snapshot.headline(at: now, preferring: "Weekly · Opus") == session)
+    #expect(snapshot.headline(at: now, preferring: "Opus Weekly") == session)
     // Without a session either, it is the fullest window.
     let noSession = Snapshot(limits: [weekly, scoped], plan: nil, fetchedAt: now)
-    #expect(noSession.headline(at: now, preferring: "Weekly · Opus") == scoped)
+    #expect(noSession.headline(at: now, preferring: "Opus Weekly") == scoped)
 }
 
 @Test func formatting() {

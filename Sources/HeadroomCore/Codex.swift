@@ -52,7 +52,7 @@ public struct CodexProvider: Provider {
                 let seconds = Parse.number(window["limit_window_seconds"])
                 var (kind, label) = describe(seconds)
                 if let prefix {
-                    label = "\(prefix) · \(label)"
+                    label = "\(prefix) \(label)"
                     kind = .other
                 }
                 limits.append(Limit(kind: kind, label: label, percent: percent, resetsAt: Parse.epochDate(window["reset_at"]), windowSeconds: seconds))

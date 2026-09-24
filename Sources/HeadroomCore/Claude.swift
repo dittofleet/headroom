@@ -76,7 +76,7 @@ public struct ClaudeProvider: Provider {
                 let model = (scope?["model"] as? [String: Any])?["display_name"] as? String
                 let surface = scope?["surface"] as? String
                 let label = [model, surface].compactMap { $0 }.joined(separator: " ")
-                limits.append(Limit(kind: .weekly, label: "Weekly · \(label.isEmpty ? "scoped" : label)", percent: percent, resetsAt: resetsAt, windowSeconds: weeklyWindow))
+                limits.append(Limit(kind: .weekly, label: "\(label.isEmpty ? "Scoped" : label) Weekly", percent: percent, resetsAt: resetsAt, windowSeconds: weeklyWindow))
             default:
                 let window: Double? = (entry["group"] as? String) == "weekly" ? weeklyWindow : nil
                 limits.append(Limit(kind: .other, label: kind.replacingOccurrences(of: "_", with: " ").capitalized, percent: percent, resetsAt: resetsAt, windowSeconds: window))
@@ -88,8 +88,8 @@ public struct ClaudeProvider: Provider {
             let legacy: [(String, Limit.Kind, String, Double)] = [
                 ("five_hour", .session, "Session", sessionWindow),
                 ("seven_day", .weekly, "Weekly", weeklyWindow),
-                ("seven_day_opus", .weekly, "Weekly · Opus", weeklyWindow),
-                ("seven_day_sonnet", .weekly, "Weekly · Sonnet", weeklyWindow),
+                ("seven_day_opus", .weekly, "Opus Weekly", weeklyWindow),
+                ("seven_day_sonnet", .weekly, "Sonnet Weekly", weeklyWindow),
             ]
             for (key, kind, label, window) in legacy {
                 guard let entry = root[key] as? [String: Any], let percent = Parse.number(entry["utilization"]) else { continue }
