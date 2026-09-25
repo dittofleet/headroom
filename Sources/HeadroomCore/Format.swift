@@ -37,8 +37,9 @@ public enum Format {
         id.split(separator: "_").map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }.joined(separator: " ")
     }
 
+    /// "12s ago", "5m ago", "2h 3m ago".
     public static func age(_ date: Date, now: Date) -> String {
-        let seconds = now.timeIntervalSince(date)
-        return seconds < 90 ? "just now" : "\(duration(seconds)) ago"
+        let seconds = max(now.timeIntervalSince(date), 0)
+        return seconds < 60 ? "\(Int(seconds))s ago" : "\(duration(seconds)) ago"
     }
 }
