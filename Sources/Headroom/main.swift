@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var openSubmenus = 0
     private var menuIsBehind = false
     private var iconSpec: StatusIcon.Spec?
+    /// Runs while the menu is open, so "12s ago" and the countdowns move.
+    private var ageTicker: Timer?
     private let updates = UpdateController()
 
     init(engine: Engine) {
@@ -142,6 +144,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Looking is the moment freshness matters; still bounded by the
         // engine's floor and any server cooldown.
         engine.refresh(manual: true)
+
+        ageTicker?.invalidate()
+        let ticker = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                let now = Date()
+                for item in self?.menu.items ?? [] { (item.view as? Ticking)?.now = now }
+            }
+        }
+        ticker.tolerance = 0.1
+        // Common modes, or it would wait while the menu tracks the mouse.
+        RunLoop.main.add(ticker, forMode: .common)
+        ageTicker = ticker
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -151,10 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         menuIsOpen = false
-    }
-
-    @objc func refreshNow() {
-        engine.refresh(manual: true)
+        ageTicker?.invalidate()
+        ageTicker = nil
     }
 
     @objc func toggleShowPace() {

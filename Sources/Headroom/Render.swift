@@ -60,6 +60,9 @@ enum Render {
                 let drawn = NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color])
                 drawn.draw(at: NSPoint(x: rightAligned ? x - drawn.size().width : x, y: y + (22 - drawn.size().height) / 2))
             }
+            // Checked items live in Settings, which isn't drawn, and AppKit
+            // leaves no checkmark column in a menu without any.
+            let textX = MenuMetrics.inset
             for entry in entries {
                 y -= height(entry)
                 switch entry {
@@ -71,16 +74,15 @@ enum Render {
                     view.draw(view.bounds)
                     NSGraphicsContext.restoreGraphicsState()
                 case .info(let string, _):
-                    text(string, x: 26, color: .tertiaryLabelColor)
-                case .action(let title, _, let key, let checked, _):
-                    if checked { text("✓", x: 9, color: .labelColor) }
-                    text(title, x: 26, color: .labelColor)
+                    text(string, x: textX, color: .tertiaryLabelColor)
+                case .action(let title, _, let key, _, _):
+                    text(title, x: textX, color: .labelColor)
                     if !key.isEmpty { text("⌘\(key.uppercased())", x: size.width - MenuMetrics.inset, color: .tertiaryLabelColor, rightAligned: true) }
                 case .separator:
                     NSColor.separatorColor.setFill()
                     NSRect(x: MenuMetrics.inset, y: y + 5, width: size.width - MenuMetrics.inset * 2, height: 1).fill()
                 case .submenu(let title, _):
-                    text(title, x: 26, color: .labelColor)
+                    text(title, x: textX, color: .labelColor)
                     text("›", x: size.width - MenuMetrics.inset, color: .secondaryLabelColor, rightAligned: true)
                 }
             }

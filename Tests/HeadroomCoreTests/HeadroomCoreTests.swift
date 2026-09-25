@@ -177,6 +177,11 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(Format.duration(6240) == "1h 44m")
     #expect(Format.duration(5 * 86400 + 7 * 3600 + 120) == "5d 7h")
     #expect(Format.percent(99.9) == "99%")
+    #expect(Format.age(now.addingTimeInterval(-12.7), now: now) == "12s ago")
+    #expect(Format.age(now.addingTimeInterval(-59.9), now: now) == "59s ago")
+    #expect(Format.age(now.addingTimeInterval(-60), now: now) == "1m ago")
+    #expect(Format.age(now.addingTimeInterval(-90), now: now) == "1m ago")
+    #expect(Format.age(now.addingTimeInterval(5), now: now) == "0s ago")
 
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!

@@ -177,7 +177,6 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
         entries += group.map(MenuEntry.view)
         entries.append(.view(SeparatorView()))
     }
-    entries.append(.action(title: "Refresh Now", selector: #selector(AppDelegate.refreshNow), key: "r"))
     for (index, provider) in engine.providers.enumerated() {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
@@ -227,9 +226,9 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
         let state = engine.state(provider)
         let fetching = engine.isFetching(provider)
         let stale = state.snapshot?.isStale(at: now) ?? true
-        let detail = fetching ? "Updating…" : state.snapshot.map { Format.age($0.fetchedAt, now: now) } ?? "No data"
+        let detail: HeaderView.Detail = fetching ? .text("Updating…") : state.snapshot.map { .age(since: $0.fetchedAt) } ?? .text("No data")
 
-        var views: [NSView] = [HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, detailIsProblem: stale && !fetching)]
+        var views: [NSView] = [HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, now: now, detailIsProblem: stale && !fetching)]
         views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale, showPace: showPace) }
         if let error = state.lastError {
             let wait = state.nextFetchAt.timeIntervalSince(now)
@@ -237,6 +236,13 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
         }
         return views
     }
+}
+
+/// A row that draws from the time, moved forward every second while the
+/// menu is open.
+@MainActor
+protocol Ticking: AnyObject {
+    var now: Date { get set }
 }
 
 /// A divider drawn by the app rather than the system, so it spans the same
@@ -279,11 +285,18 @@ final class NoticeView: NSView {
 
 /// Provider heading inside the menu: name and plan on the left, freshness on
 /// the right.
-final class HeaderView: NSView {
-    private let title: NSAttributedString
-    private let detail: NSAttributedString
+final class HeaderView: NSView, Ticking {
+    enum Detail {
+        case text(String)
+        case age(since: Date)
+    }
 
-    init(name: String, plan: String?, detail: String, detailIsProblem: Bool) {
+    private let title: NSAttributedString
+    private let detail: Detail
+    private let detailAttributes: [NSAttributedString.Key: Any]
+    var now: Date { didSet { needsDisplay = true } }
+
+    init(name: String, plan: String?, detail: Detail, now: Date, detailIsProblem: Bool) {
         let title = NSMutableAttributedString(string: name, attributes: [
             .font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: NSColor.labelColor,
         ])
@@ -293,18 +306,27 @@ final class HeaderView: NSView {
             ]))
         }
         self.title = title
-        self.detail = NSAttributedString(string: detail, attributes: [
-            .font: NSFont.systemFont(ofSize: 11),
+        self.detail = detail
+        self.detailAttributes = [
+            // Even digits, so a ticking age doesn't wobble.
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
             .foregroundColor: detailIsProblem ? NSColor.systemOrange : NSColor.tertiaryLabelColor,
-        ])
+        ]
+        self.now = now
         super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 24))
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
-        let detailWidth = detail.size().width
-        detail.draw(at: NSPoint(x: bounds.width - MenuMetrics.inset - detailWidth, y: 4))
+        let text: String
+        switch detail {
+        case .text(let string): text = string
+        case .age(let date): text = Format.age(date, now: now)
+        }
+        let drawn = NSAttributedString(string: text, attributes: detailAttributes)
+        let detailWidth = drawn.size().width
+        drawn.draw(at: NSPoint(x: bounds.width - MenuMetrics.inset - detailWidth, y: 4))
         // A long plan name gives way to the freshness rather than running into it.
         let titleWidth = bounds.width - MenuMetrics.inset * 2 - detailWidth - 8
         title.draw(with: NSRect(x: MenuMetrics.inset, y: 3, width: titleWidth, height: title.size().height),
@@ -313,9 +335,9 @@ final class HeaderView: NSView {
 }
 
 /// One limit: label, percentage, a bar with a pace tick, and the reset time.
-final class LimitRowView: NSView {
+final class LimitRowView: NSView, Ticking {
     private let limit: Limit
-    private let now: Date
+    var now: Date { didSet { needsDisplay = true } }
     private let stale: Bool
     private let showPace: Bool
 
