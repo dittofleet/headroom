@@ -74,6 +74,8 @@ headroom has no login of its own. It borrows the sessions you already have:
 
 - **Claude**: the OAuth token Claude Code keeps in the keychain (or
   `~/.claude/.credentials.json`), against the endpoint behind `/usage`.
+  The plan name comes from your account profile, asked for about once an
+  hour, since the one stored with the token can predate an upgrade.
 - **Codex**: the token the Codex CLI keeps in `~/.codex/auth.json`, against
   the endpoint behind `/status`.
 
@@ -99,7 +101,7 @@ Code's keychain item already trusts, so there is no password prompt.
 
 ## Staying out of trouble
 
-Both endpoints are unofficial, and the Claude one has a very small request
+The endpoints are unofficial, and Claude's usage one has a very small request
 quota. So headroom:
 
 - refreshes every 5 minutes, plus when you open the menu (at most once per

@@ -31,25 +31,24 @@ public struct ClaudeProvider: Provider {
             }
             result = await Self.usage(creds)
         }
-        return result.flatMap { data in
-            guard var snapshot = Self.parse(data, now: Date()) else {
-                return .failure(FetchFailure("Unrecognized response"))
-            }
-            snapshot.plan = creds.plan
-            return .success(snapshot)
+        let parsed = result.flatMap { data in
+            Self.parse(data, now: Date()).map(Result.success) ?? .failure(FetchFailure("Unrecognized response"))
         }
+        guard case .success(var snapshot) = parsed else { return parsed }
+        snapshot.plan = await PlanLookup.shared.plan(creds) ?? creds.plan
+        return .success(snapshot)
     }
 
     private static func usage(_ creds: Credentials) async -> Result<Data, FetchFailure> {
         await HTTP.get(
             endpoint,
-            headers: [
-                "Authorization": "Bearer \(creds.token)",
-                "anthropic-beta": "oauth-2025-04-20",
-                "Content-Type": "application/json",
-            ],
+            headers: oauthHeaders(creds).merging(["Content-Type": "application/json"]) { $1 },
             authHint: "Token rejected, \(signInAdvice)"
         )
+    }
+
+    static func oauthHeaders(_ creds: Credentials) -> [String: String] {
+        ["Authorization": "Bearer \(creds.token)", "anthropic-beta": "oauth-2025-04-20"]
     }
 
     // MARK: Parsing
@@ -153,6 +152,18 @@ public struct ClaudeProvider: Provider {
         }
     }
 
+    /// The plan from the account profile. The one stored with the token is
+    /// only as new as Claude Code's last sign-in or renewal, so it can still
+    /// name the plan from before an upgrade.
+    static func parseProfile(_ data: Data) -> String? {
+        // "claude_max" is what the stored credentials call "max". Other
+        // organization types are API ones, with no plan to show.
+        guard let organization = Parse.object(data)?["organization"] as? [String: Any],
+              let type = organization["organization_type"] as? String, type.hasPrefix("claude_")
+        else { return nil }
+        return planName(String(type.dropFirst("claude_".count)), tier: organization["rate_limit_tier"] as? String)
+    }
+
     static let keychainService = "Claude Code-credentials"
     static let configDirectory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
     static let sources: [Credentials.Source] = [
@@ -231,6 +242,42 @@ public struct ClaudeProvider: Provider {
         if !renewal.scopes.isEmpty { oauth["scopes"] = renewal.scopes }
         root["claudeAiOauth"] = oauth
         return try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys, .withoutEscapingSlashes])
+    }
+}
+
+/// Asks for the account's plan when the token changes and otherwise at most
+/// hourly: plans rarely change, and every poll already costs a request.
+actor PlanLookup {
+    static let shared = PlanLookup()
+
+    private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/profile")!
+    private static let askAgainAfter: TimeInterval = 3600
+    private static let retryAfter: TimeInterval = 10 * 60
+
+    /// The last answer. It stands until a newer one arrives, since a new
+    /// token is far more often a renewal than another account.
+    private var plan: String?
+    private var askedWith: String?
+    private var nextAsk = Date.distantPast
+    private var asking = false
+
+    /// Nil until the profile has answered, in which case the stored plan is
+    /// the best there is.
+    func plan(_ creds: ClaudeProvider.Credentials) async -> String? {
+        // A token without the profile scope would only be refused.
+        guard creds.scopes.isEmpty || creds.scopes.contains("user:profile") else { return nil }
+        guard !asking, creds.token != askedWith || Date() >= nextAsk else { return plan }
+        asking = true
+        defer { asking = false }
+        askedWith = creds.token
+        let response = await HTTP.get(Self.endpoint, headers: ClaudeProvider.oauthHeaders(creds), authHint: "Token rejected")
+        if case .success(let data) = response, let answer = ClaudeProvider.parseProfile(data) {
+            plan = answer
+            nextAsk = Date().addingTimeInterval(Self.askAgainAfter)
+        } else {
+            nextAsk = Date().addingTimeInterval(Self.retryAfter)
+        }
+        return plan
     }
 }
 

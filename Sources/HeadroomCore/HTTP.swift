@@ -10,7 +10,7 @@ enum HTTP {
     }()
 
     /// Requests carry a bearer token, and URLSession would replay it to
-    /// wherever a redirect points. Neither endpoint redirects, so refuse:
+    /// wherever a redirect points. None of the endpoints redirect, so refuse:
     /// the 3xx then surfaces as an ordinary HTTP failure.
     private final class NoRedirects: NSObject, URLSessionTaskDelegate {
         func urlSession(
