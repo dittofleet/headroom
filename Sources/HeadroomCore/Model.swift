@@ -70,6 +70,13 @@ public struct Snapshot: Codable, Equatable, Sendable {
             ?? limits.first { $0.kind == .session }
             ?? limits.max { $0.percent(at: now) < $1.percent(at: now) }
     }
+
+    /// The weekly limits a stacked menu bar row draws behind its headline:
+    /// every one but the headline itself.
+    public func stackedBehindHeadline(at now: Date) -> [Limit] {
+        let front = headline(at: now)
+        return limits.filter { $0.kind == .weekly && $0 != front }
+    }
 }
 
 public struct FetchFailure: Error, Sendable {

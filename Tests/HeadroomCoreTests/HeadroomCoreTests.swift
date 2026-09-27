@@ -170,6 +170,19 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(noSession.headline(at: now, preferring: "Opus Weekly") == scoped)
 }
 
+@Test func stackedBehindHeadlineIsTheOtherWeeklies() {
+    let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
+    let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
+    let scoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
+    let all = Snapshot(limits: [session, weekly, scoped], plan: nil, fetchedAt: now)
+    #expect(all.stackedBehindHeadline(at: now) == [weekly, scoped])
+    // Without a session the fullest weekly is in front, not behind.
+    let noSession = Snapshot(limits: [weekly, scoped], plan: nil, fetchedAt: now)
+    #expect(noSession.stackedBehindHeadline(at: now) == [weekly])
+    let sessionOnly = Snapshot(limits: [session], plan: nil, fetchedAt: now)
+    #expect(sessionOnly.stackedBehindHeadline(at: now) == [])
+}
+
 @Test func formatting() {
     #expect(Format.duration(59) == "now")
     #expect(Format.duration(44 * 60) == "44m")

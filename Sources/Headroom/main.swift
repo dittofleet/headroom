@@ -70,11 +70,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if menuIsOpen { openSubmenus == 0 ? buildMenu(now: now) : (menuIsBehind = true) }
     }
 
-    /// Reads out what the icon shows.
+    /// Reads out what the icon shows, stacked weekly limits included.
     private func accessibilitySummary(_ spec: StatusIcon.Spec) -> String {
         zip(engine.providers, spec.rows).map { provider, row in
-            [provider.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
-        }.joined(separator: ", ")
+            let front = [provider.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
+            return ([front] + row.backdrop.map { "\($0.label) \(Format.percent($0.percent))" }).joined(separator: ", ")
+        }.joined(separator: ". ")
     }
 
     var chrome: MenuChrome {
@@ -178,7 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         render()
     }
 
-    /// The item's title is the limit's label, and its tag the provider.
+    /// The item's title is the limit's label or `stackedChoice`, and its tag
+    /// the provider.
     @objc func chooseMenuBarLimit(_ sender: NSMenuItem) {
         Preferences.menuBarLimits[engine.providers[sender.tag].id] = sender.title
         render()

@@ -7,7 +7,10 @@ A simple menu bar app for your Claude and Codex usage limits.
 The menu bar shows one row per provider: how much of the current session
 window is used. Settings lets you pick a different window per provider,
 such as Claude's weekly or a model-scoped weekly limit, and every window
-is still listed in the menu. Rows turn orange at 75% and red at 90%.
+is still listed in the menu. "Stacked" shows the session with the weekly
+limits in a lighter fill behind it: the general one on top and a
+model-scoped one, such as Claude's Fable weekly, on the bottom half.
+Rows turn orange at 75% and red at 90%.
 "Show Numbers in Menu Bar" drops the percentages and leaves just the bars,
 for a narrower icon.
 
