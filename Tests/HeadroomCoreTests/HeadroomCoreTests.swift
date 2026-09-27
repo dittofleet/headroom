@@ -81,6 +81,19 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(CodexProvider.planName("unknown") == nil)
 }
 
+@Test func claudeProfilePlan() {
+    func plan(_ organization: String) -> String? {
+        ClaudeProvider.parseProfile(Data(#"{"organization": \#(organization)}"#.utf8))
+    }
+    #expect(plan(#"{"organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}"#) == "Max 20x")
+    #expect(plan(#"{"organization_type": "claude_pro", "rate_limit_tier": "default_claude_ai"}"#) == "Pro")
+    #expect(plan(#"{"organization_type": "claude_team", "rate_limit_tier": "default_claude_max_5x"}"#) == "Team Premium")
+    #expect(plan(#"{"organization_type": "claude_enterprise"}"#) == "Enterprise")
+    #expect(plan(#"{"organization_type": "claude_free"}"#) == "Free")
+    #expect(plan(#"{"organization_type": "api", "rate_limit_tier": "auto_prepaid_tier_1"}"#) == nil)
+    #expect(ClaudeProvider.parseProfile(Data(#"{"account": {}}"#.utf8)) == nil)
+}
+
 @Test func claudeRenewalResponse() throws {
     let renewal = try #require(ClaudeProvider.parseRenewal(Data(
         #"{"token_type": "Bearer", "access_token": "new", "expires_in": 28800, "refresh_token": "", "refresh_token_expires_in": 2592000, "scope": "user:inference user:profile"}"#.utf8), now: now))
