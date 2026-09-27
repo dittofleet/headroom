@@ -27,7 +27,15 @@ enum StatusIcon {
         /// no data at all.
         var label: String?
         var percent: Double?
+        /// Weekly limits drawn lighter behind the bar, as stacked strips:
+        /// the general one on top, model-scoped ones below.
+        var backdrop: [Strip] = []
         var stale: Bool
+    }
+
+    struct Strip: Equatable {
+        var label: String
+        var percent: Double
     }
 
     /// Everything the icon is drawn from. Equal specs draw the same image.
@@ -43,11 +51,15 @@ enum StatusIcon {
     static func spec(engine: Engine, chrome: MenuChrome, now: Date) -> Spec {
         let rows = engine.providers.map { provider -> Row in
             let snapshot = engine.state(provider).snapshot
-            let headline = snapshot?.headline(at: now, preferring: chrome.menuBarLimits[provider.id])
+            let choice = chrome.menuBarLimits[provider.id]
+            let headline = snapshot?.headline(at: now, preferring: choice)
+            var behind: [Limit] = []
+            if choice == stackedChoice, let snapshot { behind = snapshot.stackedBehindHeadline(at: now) }
             return Row(
                 glyph: provider.glyph,
                 label: headline?.label,
                 percent: headline?.percent(at: now),
+                backdrop: behind.map { Strip(label: $0.label, percent: $0.percent(at: now)) },
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
@@ -68,10 +80,32 @@ enum StatusIcon {
         let numberWidth: CGFloat = spec.numbers ? gap + ceil(textSizes.map(\.width).max() ?? 0) : 0
         let size = NSSize(width: glyphWidth + barWidth + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
+        let backdropLevels = rows.flatMap(\.backdrop).map { Level(percent: $0.percent) }
+        func isDark(_ appearance: NSAppearance) -> Bool {
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        }
         // What the system would tint the icon, for when it can't. The drawing
         // handler runs again whenever the menu bar turns light or dark.
-        let plain = NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .white : .black
+        let plain = NSColor(name: nil) { isDark($0) ? .white : .black }
+        // The track, and a plain weekly backdrop over it, are the ink at this.
+        let trackAlpha: CGFloat = 0.25
+        // A weekly backdrop in a warning color is drawn at `tintAlpha` and
+        // shaded to land as light as a plain one, so only the hue differs.
+        // The track's lightness is what a typical menu bar gives.
+        let tintAlpha: CGFloat = 0.45
+        func tint(_ percent: Double, alpha: CGFloat) -> NSColor {
+            guard let warning = Level(percent: percent).color else { return plain.withAlphaComponent(trackAlpha * alpha) }
+            return NSColor(name: nil) { appearance in
+                let dark = isDark(appearance)
+                let ink: CGFloat = dark ? 1 : 0, track: CGFloat = dark ? 0.44 : 0.64
+                let target = track + (ink - track) * trackAlpha / tintAlpha
+                guard let rgb = warning.usingColorSpace(.sRGB) else { return plain }
+                let lightness = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+                let shaded = lightness > target
+                    ? rgb.blended(withFraction: 1 - target / lightness, of: .black)
+                    : rgb.blended(withFraction: (target - lightness) / (1 - lightness), of: .white)
+                return (shaded ?? rgb).withAlphaComponent(tintAlpha * alpha)
+            }
         }
 
         let image = NSImage(size: size, flipped: false) { _ in
@@ -89,7 +123,17 @@ enum StatusIcon {
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
-                drawBar(in: track, percent: row.percent ?? 0, track: color.withAlphaComponent(0.25 * alpha), fill: color.withAlphaComponent(alpha), minFill: 2)
+                drawTrack(track, color: color.withAlphaComponent(trackAlpha * alpha))
+                // Each weekly limit fills its own horizontal strip of the
+                // track, lighter, so the bar's own fill still reads on top.
+                let stripHeight = track.height / CGFloat(max(row.backdrop.count, 1))
+                for (position, strip) in row.backdrop.enumerated() {
+                    NSGraphicsContext.saveGraphicsState()
+                    NSRect(x: track.minX, y: track.maxY - stripHeight * CGFloat(position + 1), width: track.width, height: stripHeight).clip()
+                    drawFill(track, percent: strip.percent, color: tint(strip.percent, alpha: alpha), minFill: 2)
+                    NSGraphicsContext.restoreGraphicsState()
+                }
+                drawFill(track, percent: row.percent ?? 0, color: color.withAlphaComponent(alpha), minFill: 2)
 
                 if spec.numbers {
                     (texts[index] as NSString).draw(at: NSPoint(x: track.maxX + gap, y: y + (rowHeight - textSizes[index].height) / 2), withAttributes: attributes)
@@ -103,21 +147,24 @@ enum StatusIcon {
         }
         // A template image follows the menu bar's light/dark tint exactly;
         // give that up only when there is a warning color to show.
-        image.isTemplate = levels.allSatisfy { $0 == .normal }
+        image.isTemplate = (levels + backdropLevels).allSatisfy { $0 == .normal }
         return image
     }
 }
 
-/// A rounded track with a fill that never shrinks below a visible nub.
-private func drawBar(in track: NSRect, percent: Double, track trackColor: NSColor, fill fillColor: NSColor, minFill: CGFloat? = nil) {
-    let radius = track.height / 2
-    trackColor.setFill()
-    NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
+/// A bar's rounded track.
+private func drawTrack(_ track: NSRect, color: NSColor) {
+    color.setFill()
+    NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
+}
+
+/// A bar's fill over its track, never shrinking below a visible nub.
+private func drawFill(_ track: NSRect, percent: Double, color: NSColor, minFill: CGFloat? = nil) {
     guard percent > 0 else { return }
     var fill = track
     fill.size.width = max(track.width * percent / 100, minFill ?? track.height)
-    fillColor.setFill()
-    NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
+    color.setFill()
+    NSBezierPath(roundedRect: fill, xRadius: track.height / 2, yRadius: track.height / 2).fill()
 }
 
 enum Preferences {
@@ -134,7 +181,8 @@ enum Preferences {
     }
 
     /// The label of the limit each provider shows in the menu bar icon, by
-    /// provider id. A provider without one shows its session.
+    /// provider id, or `stackedChoice`. A provider without one shows its
+    /// session.
     static var menuBarLimits: [String: String] {
         get { UserDefaults.standard.dictionary(forKey: "menuBarLimits") as? [String: String] ?? [:] }
         set { UserDefaults.standard.set(newValue, forKey: "menuBarLimits") }
@@ -202,17 +250,29 @@ func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntr
     return entries
 }
 
-/// The limits each provider could show in the menu bar, under a heading per
-/// provider, with a check on the one showing now.
+/// The menu bar choice that shows the session with the weekly limits
+/// behind it, rather than a single limit.
+let stackedChoice = "Stacked"
+
+/// The limits each provider could show in the menu bar, plus Stacked when
+/// there is something to stack, under a heading per provider, with a check
+/// on the one showing now.
 @MainActor
 func menuBarChoices(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     var entries: [MenuEntry] = []
     for (index, provider) in engine.providers.enumerated() {
         guard let snapshot = engine.state(provider).snapshot else { continue }
-        let showing = snapshot.headline(at: now, preferring: chrome.menuBarLimits[provider.id])
+        let choice = chrome.menuBarLimits[provider.id]
+        let canStack = !snapshot.stackedBehindHeadline(at: now).isEmpty
+        // A stacked choice with nothing left to stack shows the plain session.
+        let stacked = choice == stackedChoice && canStack
+        let showing = stacked ? nil : snapshot.headline(at: now, preferring: choice)
         entries.append(.info("\(provider.name) in Menu Bar"))
         entries += snapshot.limits.map { limit in
             .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit == showing, tag: index)
+        }
+        if canStack {
+            entries.append(.action(title: stackedChoice, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: stacked, tag: index))
         }
     }
     return entries
@@ -369,7 +429,8 @@ final class LimitRowView: NSView, Ticking {
         value.draw(at: NSPoint(x: bounds.width - inset - value.size().width, y: 26))
 
         let track = NSRect(x: inset, y: 18, width: bounds.width - inset * 2, height: 5)
-        drawBar(in: track, percent: percent, track: NSColor.labelColor.withAlphaComponent(0.12), fill: accent.withAlphaComponent(stale ? 0.5 : 1))
+        drawTrack(track, color: NSColor.labelColor.withAlphaComponent(0.12))
+        drawFill(track, percent: percent, color: accent.withAlphaComponent(stale ? 0.5 : 1))
         // Pace tick: how far through the window we are. Fill past the tick
         // means usage is running ahead of the clock.
         if showPace, let elapsed = limit.elapsedFraction(at: now) {
