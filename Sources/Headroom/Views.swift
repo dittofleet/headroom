@@ -249,6 +249,7 @@ func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntr
     entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
+    if chrome.commandLineTool != nil { entries.append(.separator) }
     switch chrome.commandLineTool {
     case nil: break
     case .installed:
