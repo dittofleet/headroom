@@ -1,3 +1,5 @@
+<img src="assets/icon.svg" width="80" alt="headroom icon">
+
 # headroom
 
 A simple menu bar app for your Claude and Codex usage limits.
