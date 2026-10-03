@@ -43,7 +43,8 @@ checkout, run `make install` inside it (needs the Xcode command line
 tools).
 
 To uninstall, quit Headroom and move it to the Trash. Nothing is installed
-outside the app, and its login item goes with it.
+outside the app, and its login item goes with it. If you installed the
+command line tool, choose "Uninstall Command Line Tool" in Settings first.
 
 ## Updates
 
@@ -68,6 +69,38 @@ To turn the background checks off (the menu item keeps working):
 
 ```sh
 defaults write io.github.dittofleet.headroom autoUpdate -bool false
+```
+
+## For agents
+
+`headroom` prints one provider's numbers from the menu, for coding agents
+and scripts:
+
+```sh
+headroom claude          # as text
+headroom codex --json    # percent used and reset time per limit
+```
+
+It asks for one provider at a time so an agent only sees the limits it runs
+under.
+
+It only reads what the app last saved and never fetches, so any number of
+agents can call it without touching the endpoint's small quota. That also
+means the numbers are only fresh while Headroom is running.
+
+To get it, choose "Install Command Line Tool" in Settings. That links
+`headroom` into `~/.local/bin` to the binary inside the app, so it updates
+with the app. Headroom only ever touches a link it made, and if the app
+moves it repoints that link the next time it starts.
+
+[`skills/headroom`](skills/headroom/SKILL.md) is an agent skill that tells
+agents how to check. Copy it into
+`~/.claude/skills/` for Claude Code or `~/.agents/skills/` for Codex:
+
+```sh
+mkdir -p ~/.claude/skills/headroom
+curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/skills/headroom/SKILL.md \
+  -o ~/.claude/skills/headroom/SKILL.md
 ```
 
 ## Where the numbers come from

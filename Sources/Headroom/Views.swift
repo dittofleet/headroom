@@ -213,6 +213,8 @@ struct MenuChrome {
     var updateReady: Bool
     var canUpdate: Bool
     var startAtLogin: Bool
+    /// Nil when this build has no CLI next to it to link.
+    var commandLineTool: CLILink.State?
     var showPace: Bool
     var showNumbers: Bool
     var menuBarLimits: [String: String]
@@ -247,6 +249,16 @@ func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntr
     entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
     entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
     entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
+    if chrome.commandLineTool != nil { entries.append(.separator) }
+    switch chrome.commandLineTool {
+    case nil: break
+    case .installed:
+        entries.append(.action(title: "Uninstall Command Line Tool", selector: #selector(AppDelegate.uninstallCommandLineTool)))
+    case .stale:
+        entries.append(.action(title: "Repair Command Line Tool", selector: #selector(AppDelegate.installCommandLineTool)))
+    case .missing, .foreign:
+        entries.append(.action(title: "Install Command Line Tool", selector: #selector(AppDelegate.installCommandLineTool)))
+    }
     return entries
 }
 

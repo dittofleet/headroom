@@ -275,3 +275,78 @@ private struct StubProvider: Provider {
     #expect(!engine.isDue(provider, manual: false, now: now.addingTimeInterval(210)))
     #expect(engine.isDue(provider, manual: false, now: now.addingTimeInterval(216)))
 }
+
+@Test func reportReadsLimitsAsTheyStandNow() throws {
+    var state = ProviderState()
+    state.snapshot = Snapshot(limits: [
+        Limit(kind: .session, label: "Session", percent: 80, resetsAt: now.addingTimeInterval(9000), windowSeconds: 18000),
+        Limit(kind: .weekly, label: "Weekly", percent: 92, resetsAt: now.addingTimeInterval(-60), windowSeconds: 604800),
+        Limit(kind: .other, label: "Odd", percent: 100, resetsAt: nil, windowSeconds: nil),
+    ], plan: "Max", fetchedAt: now.addingTimeInterval(-30 * 60))
+    state.lastError = "Offline"
+    let report = UsageReport(state, now: now)
+
+    #expect(report.stale && report.error == "Offline")
+    #expect(report.limits[0].percentUsed == 80)
+    // A window that reset after the fetch is empty, whatever was saved.
+    #expect(report.limits[1].percentUsed == 0 && report.limits[1].resetsAt == nil)
+    #expect(report.text(name: "Claude", now: now).hasPrefix("Claude (Max), checked 30m ago (stale), last refresh failed: Offline\n  Session: 80%, resets in 2h 30m"))
+    // A provider the app has never fetched says so, with nothing in it.
+    #expect(UsageReport(ProviderState(), now: now).text(name: "Codex", now: now) == "Codex, no numbers yet")
+
+    let json = try #require(JSONSerialization.jsonObject(with: Data(report.json().utf8)) as? [String: Any])
+    #expect(Set(json.keys) == ["plan", "checkedAt", "stale", "error", "limits"])
+}
+
+@Test func cliLinkOnlyManagesItsOwnLink() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let bin = dir.appendingPathComponent("bin")
+    let binary = dir.appendingPathComponent("New/Headroom.app/Contents/MacOS/headroom-cli")
+    try FileManager.default.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: binary)
+    let link = CLILink(binary: binary, binDir: bin)
+
+    #expect(link.state == .missing)
+    try link.install()
+    #expect(link.state == .installed)
+    try link.install()
+    #expect(link.state == .installed)
+
+    // A link to a copy of the app that has since gone is repaired.
+    try FileManager.default.removeItem(at: link.link)
+    try FileManager.default.createSymbolicLink(atPath: link.link.path, withDestinationPath: dir.appendingPathComponent("Old/Headroom.app/Contents/MacOS/headroom-cli").path)
+    #expect(link.state == .stale)
+    link.repairIfStale()
+    #expect(link.state == .installed)
+    try link.uninstall()
+    #expect(link.state == .missing)
+
+    // Another copy of the app that is still there keeps its link.
+    let other = dir.appendingPathComponent("Other/Headroom.app/Contents/MacOS/headroom-cli")
+    try FileManager.default.createDirectory(at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: other)
+    try FileManager.default.createSymbolicLink(atPath: link.link.path, withDestinationPath: other.path)
+    #expect(link.state == .foreign)
+    link.repairIfStale()
+    #expect(link.state == .foreign)
+    try FileManager.default.removeItem(at: link.link)
+
+    // A headroom-cli outside an app bundle was linked by hand.
+    try FileManager.default.createSymbolicLink(atPath: link.link.path, withDestinationPath: dir.appendingPathComponent("tools/headroom-cli").path)
+    #expect(link.state == .foreign)
+    link.repairIfStale()
+    #expect(link.state == .foreign)
+    try FileManager.default.removeItem(at: link.link)
+
+    // Someone else's file is refused, and survives an uninstall, until the
+    // user agrees to replace it.
+    try Data("mine".utf8).write(to: link.link)
+    #expect(link.state == .foreign)
+    #expect(throws: CLILink.Failure.self) { try link.install() }
+    try link.uninstall()
+    #expect(try Data(contentsOf: link.link) == Data("mine".utf8))
+    try link.install(replacing: true)
+    #expect(link.state == .installed)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: bin.path) == ["headroom"])
+}

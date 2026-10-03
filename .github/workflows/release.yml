@@ -69,6 +69,7 @@ jobs:
         run: |
           make zip VERSION="$GITHUB_REF_NAME" ARCHS="--arch arm64 --arch x86_64" IDENTITY="$APPLE_SIGNING_IDENTITY"
           lipo -archs dist/Headroom.app/Contents/MacOS/Headroom
+          lipo -archs dist/Headroom.app/Contents/MacOS/headroom-cli
 
       - name: Notarize
         env:
