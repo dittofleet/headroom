@@ -89,9 +89,9 @@ agents can call it without touching the endpoint's small quota. That also
 means the numbers are only fresh while Headroom is running.
 
 To get it, choose "Install Command Line Tool" in Settings. That links
-`headroom` into `~/.local/bin` (or `$XDG_BIN_HOME`) to the binary inside the
-app, so it updates with the app. Headroom only ever touches a link it made,
-and if the app moves it repoints that link the next time it starts.
+`headroom` into `~/.local/bin` to the binary inside the app, so it updates
+with the app. Headroom only ever touches a link it made, and if the app
+moves it repoints that link the next time it starts.
 
 [`skills/headroom`](skills/headroom/SKILL.md) is an agent skill that tells
 agents how to check. Copy it into

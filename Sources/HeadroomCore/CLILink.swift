@@ -10,9 +10,10 @@ public struct CLILink: Sendable {
     public enum State: Sendable, Equatable {
         case missing
         case installed
-        /// Ours, but pointing at another copy of the app.
+        /// Ours, but pointing at a copy of the app that is gone.
         case stale
-        /// Something at the path that Headroom didn't put there.
+        /// Something at the path this copy of Headroom doesn't own, including
+        /// the link of another copy that is still there.
         case foreign
     }
 
@@ -31,13 +32,10 @@ public struct CLILink: Sendable {
         self.link = binDir.appendingPathComponent("headroom")
     }
 
-    /// The XDG spec's place for user executables, which it gives no
-    /// variable of its own; XDG_BIN_HOME is the common override.
+    /// The XDG spec's place for user executables. Not $XDG_BIN_HOME: an app
+    /// started from Finder or at login doesn't see the shell's variables.
     public static var userBinDir: URL {
-        if let xdg = ProcessInfo.processInfo.environment["XDG_BIN_HOME"], xdg.hasPrefix("/") {
-            return URL(fileURLWithPath: xdg, isDirectory: true)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin", isDirectory: true)
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin", isDirectory: true)
     }
 
     public var state: State {
@@ -47,9 +45,11 @@ public struct CLILink: Sendable {
         guard let type = (try? files.attributesOfItem(atPath: link.path))?[.type] as? FileAttributeType else { return .missing }
         guard type == .typeSymbolicLink, let target = try? files.destinationOfSymbolicLink(atPath: link.path) else { return .foreign }
         if target == binary.path { return .installed }
-        // Another app bundle's CLI. A headroom-cli anywhere else was put
-        // there by hand, and is left alone.
-        return target.hasSuffix(".app/Contents/MacOS/\(Self.binaryName)") ? .stale : .foreign
+        // A copy of the app that has since moved or gone. One that is still
+        // there keeps its link, and a headroom-cli outside an app bundle was
+        // put there by hand.
+        let gone = !files.fileExists(atPath: target)
+        return gone && target.hasSuffix(".app/Contents/MacOS/\(Self.binaryName)") ? .stale : .foreign
     }
 
     /// `replacing` is the user's consent to take over a foreign file.

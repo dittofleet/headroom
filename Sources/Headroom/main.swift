@@ -205,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let path = (commandLineTool.link.path as NSString).abbreviatingWithTildeInPath
         let replacing = commandLineTool.state == .foreign
         if replacing {
-            guard alert("Replace \(path)?", "It already exists and doesn't point at Headroom.", buttons: ["Replace", "Cancel"]) == .alertFirstButtonReturn else { return }
+            guard alert("Replace \(path)?", "It already exists and doesn't point at this copy of Headroom.", buttons: ["Replace", "Cancel"]) == .alertFirstButtonReturn else { return }
         }
         do {
             try commandLineTool.install(replacing: replacing)
@@ -252,7 +252,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 // MARK: Entry point
 
-let providers = allProviders
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 if arguments.contains("--version") {
@@ -280,12 +279,13 @@ if arguments.contains("--print") {
     // Diagnostic: one fetch per provider, no cache, no UI.
     let done = DispatchSemaphore(value: 0)
     Task.detached {
-        for provider in providers {
+        for provider in allProviders {
             switch await provider.fetch() {
             case .success(let snapshot):
-                var state = ProviderState()
-                state.snapshot = snapshot
-                print(UsageReport(state, now: Date()).text(name: provider.name, now: Date()))
+                print("\(provider.name)\(snapshot.plan.map { " (\($0))" } ?? "")")
+                for limit in snapshot.limits {
+                    print("  \(limit.label): \(Format.percent(limit.percent)) · \(Format.reset(limit.resetsAt, now: Date()))")
+                }
             case .failure(let failure):
                 print("\(provider.name): \(failure.message)")
             }
@@ -301,7 +301,7 @@ MainActor.assumeIsolated {
 
     if let index = arguments.firstIndex(of: "--render"), let path = arguments.dropFirst(index + 1).first {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.
-        let engine = Engine(providers: providers, cacheFile: cacheFile)
+        let engine = Engine(providers: allProviders, cacheFile: cacheFile)
         do {
             try Render.png(engine: engine, to: URL(fileURLWithPath: path), dark: arguments.contains("--dark"), updateReady: arguments.contains("--update-ready"))
             exit(0)
@@ -318,7 +318,7 @@ MainActor.assumeIsolated {
     }
 
     let app = NSApplication.shared
-    let delegate = AppDelegate(engine: Engine(providers: providers, cacheFile: cacheFile))
+    let delegate = AppDelegate(engine: Engine(providers: allProviders, cacheFile: cacheFile))
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
     withExtendedLifetime(delegate) { app.run() }

@@ -322,6 +322,16 @@ private struct StubProvider: Provider {
     try link.uninstall()
     #expect(link.state == .missing)
 
+    // Another copy of the app that is still there keeps its link.
+    let other = dir.appendingPathComponent("Other/Headroom.app/Contents/MacOS/headroom-cli")
+    try FileManager.default.createDirectory(at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: other)
+    try FileManager.default.createSymbolicLink(atPath: link.link.path, withDestinationPath: other.path)
+    #expect(link.state == .foreign)
+    link.repairIfStale()
+    #expect(link.state == .foreign)
+    try FileManager.default.removeItem(at: link.link)
+
     // A headroom-cli outside an app bundle was linked by hand.
     try FileManager.default.createSymbolicLink(atPath: link.link.path, withDestinationPath: dir.appendingPathComponent("tools/headroom-cli").path)
     #expect(link.state == .foreign)
