@@ -9,7 +9,7 @@ let usage = """
     usage: headroom \(allProviders.map(\.id).joined(separator: "|")) [--json]
 
     Prints your usage limits for one provider as Headroom last saw them.
-    Headroom refreshes every 5 minutes while it runs; this never fetches.
+    Headroom refreshes every 5 minutes while it runs. This never fetches.
 
       --json     machine-readable output, for agents and scripts
       --version  print the version
@@ -28,7 +28,7 @@ if arguments.contains("--help") || arguments.contains("-h") {
 }
 
 if arguments.contains("--version") {
-    // The CLI has no Info.plist of its own; it shares the app's.
+    // The CLI has no Info.plist of its own, so it reads the app's.
     // Not argv[0], which is just "headroom" when found through the PATH.
     let plist = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
         .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Info.plist")
