@@ -17,9 +17,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs while the menu is open, so "12s ago" and the countdowns move.
     private var ageTicker: Timer?
     private let updates = UpdateController()
-    private let commandLineTool = Bundle.main.executableURL
-        .map { $0.deletingLastPathComponent().appendingPathComponent(CLILink.binaryName) }
-        .flatMap { FileManager.default.fileExists(atPath: $0.path) ? CLILink(binary: $0, binDir: CLILink.userBinDir) : nil }
+    /// Only an installed app manages the link: a build run from a checkout
+    /// would point it into .build.
+    private let commandLineTool = Bundle.main.bundleURL.pathExtension == "app"
+        ? Bundle.main.executableURL
+            .map { $0.deletingLastPathComponent().appendingPathComponent(CLILink.binaryName) }
+            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? CLILink(binary: $0, binDir: CLILink.userBinDir) : nil }
+        : nil
 
     init(engine: Engine) {
         self.engine = engine
@@ -33,9 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         engine.onChange = { [weak self] in self?.render() }
         updates.onChange = { [weak self] in self?.render() }
-        // Only from an installed app: a build run from a checkout would
-        // take the link over from the real one.
-        if Bundle.main.bundleURL.pathExtension == "app" { commandLineTool?.repairIfStale() }
+        commandLineTool?.repairIfStale()
 
         render()
         engine.refresh()
@@ -201,10 +203,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func installCommandLineTool() {
         guard let commandLineTool else { return }
         let path = (commandLineTool.link.path as NSString).abbreviatingWithTildeInPath
-        var replacing = false
-        if commandLineTool.state == .foreign {
+        let replacing = commandLineTool.state == .foreign
+        if replacing {
             guard alert("Replace \(path)?", "It already exists and doesn't point at Headroom.", buttons: ["Replace", "Cancel"]) == .alertFirstButtonReturn else { return }
-            replacing = true
         }
         do {
             try commandLineTool.install(replacing: replacing)
@@ -251,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 // MARK: Entry point
 
-let providers: [any Provider] = [ClaudeProvider(), CodexProvider()]
+let providers = allProviders
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 if arguments.contains("--version") {
@@ -282,10 +283,9 @@ if arguments.contains("--print") {
         for provider in providers {
             switch await provider.fetch() {
             case .success(let snapshot):
-                print("\(provider.name)\(snapshot.plan.map { " (\($0))" } ?? "")")
-                for limit in snapshot.limits {
-                    print("  \(limit.label): \(Format.percent(limit.percent)) · \(Format.reset(limit.resetsAt, now: Date()))")
-                }
+                var state = ProviderState()
+                state.snapshot = snapshot
+                print(UsageReport(state, now: Date()).text(name: provider.name, now: Date()))
             case .failure(let failure):
                 print("\(provider.name): \(failure.message)")
             }

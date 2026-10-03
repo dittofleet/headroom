@@ -19,6 +19,11 @@ public final class Engine {
     nonisolated public static let defaultCacheFile = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
         .appendingPathComponent("headroom/state.json")
 
+    /// The saved state per provider id. Empty when there is none yet.
+    nonisolated public static func savedStates(at cacheFile: URL) -> [String: ProviderState] {
+        (try? Data(contentsOf: cacheFile)).flatMap { try? JSONDecoder().decode([String: ProviderState].self, from: $0) } ?? [:]
+    }
+
     public let providers: [any Provider]
     private var states: [String: ProviderState]
     public var onChange: (() -> Void)?
@@ -32,12 +37,7 @@ public final class Engine {
     public init(providers: [any Provider], cacheFile: URL?) {
         self.providers = providers
         self.cacheFile = cacheFile
-        var states: [String: ProviderState] = [:]
-        if let cacheFile, let data = try? Data(contentsOf: cacheFile),
-           let saved = try? JSONDecoder().decode([String: ProviderState].self, from: data) {
-            states = saved
-        }
-        self.states = states
+        states = cacheFile.map(Self.savedStates) ?? [:]
     }
 
     public func state(_ provider: any Provider) -> ProviderState {

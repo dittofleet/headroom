@@ -8,25 +8,20 @@ public struct UsageReport: Encodable, Sendable {
         public var label: String
         public var percentUsed: Int
         public var resetsAt: Date?
-        public var resetsInSeconds: Int?
     }
 
     public var plan: String?
-    public var checkedSecondsAgo: Int?
+    public var checkedAt: Date?
     /// Over 20 minutes old: the app is not running or cannot refresh.
     public var stale: Bool
     /// Why the last refresh failed. The numbers are the last good ones.
     public var error: String?
     public var limits: [LimitUsage]
-    /// For the text, which says how long ago rather than a count of seconds.
-    private var checkedAt: Date?
-    private enum CodingKeys: String, CodingKey { case plan, checkedSecondsAgo, stale, error, limits }
 
     public init(_ state: ProviderState, now: Date) {
         let snapshot = state.snapshot
         plan = snapshot?.plan
         checkedAt = snapshot?.fetchedAt
-        checkedSecondsAgo = snapshot.map { Int(max(now.timeIntervalSince($0.fetchedAt), 0)) }
         stale = snapshot?.isStale(at: now) ?? true
         error = state.lastError
         limits = snapshot?.limits.map { LimitUsage($0, now: now) } ?? []
@@ -45,7 +40,7 @@ public struct UsageReport: Encodable, Sendable {
         header += checkedAt.map { ", checked " + Format.age($0, now: now) + (stale ? " (stale)" : "") } ?? ", no numbers yet"
         if let error { header += ", last refresh failed: " + error }
         let lines = limits.map { limit in
-            "  \(limit.label): \(limit.percentUsed)%" + (limit.resetsInSeconds.map { ", resets in " + Format.duration(TimeInterval($0)) } ?? "")
+            "  \(limit.label): \(limit.percentUsed)%" + (limit.resetsAt.map { ", resets in " + Format.duration($0.timeIntervalSince(now)) } ?? "")
         }
         return ([header] + lines).joined(separator: "\n")
     }
@@ -53,10 +48,8 @@ public struct UsageReport: Encodable, Sendable {
 
 extension UsageReport.LimitUsage {
     init(_ limit: Limit, now: Date) {
-        let resetsAt = limit.resetsAt.flatMap { $0 > now ? $0 : nil }
         label = limit.label
         percentUsed = Format.wholePercent(limit.percent(at: now))
-        self.resetsAt = resetsAt
-        resetsInSeconds = resetsAt.map { Int($0.timeIntervalSince(now)) }
+        resetsAt = limit.resetsAt.flatMap { $0 > now ? $0 : nil }
     }
 }

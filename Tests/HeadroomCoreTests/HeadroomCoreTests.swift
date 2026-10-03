@@ -286,8 +286,8 @@ private struct StubProvider: Provider {
     state.lastError = "Offline"
     let report = UsageReport(state, now: now)
 
-    #expect(report.stale && report.checkedSecondsAgo == 1800 && report.error == "Offline")
-    #expect(report.limits[0].percentUsed == 80 && report.limits[0].resetsInSeconds == 9000)
+    #expect(report.stale && report.error == "Offline")
+    #expect(report.limits[0].percentUsed == 80)
     // A window that reset after the fetch is empty, whatever was saved.
     #expect(report.limits[1].percentUsed == 0 && report.limits[1].resetsAt == nil)
     #expect(report.text(name: "Claude", now: now).hasPrefix("Claude (Max), checked 30m ago (stale), last refresh failed: Offline\n  Session: 80%, resets in 2h 30m"))
@@ -295,7 +295,7 @@ private struct StubProvider: Provider {
     #expect(UsageReport(ProviderState(), now: now).text(name: "Codex", now: now) == "Codex, no numbers yet")
 
     let json = try #require(JSONSerialization.jsonObject(with: Data(report.json().utf8)) as? [String: Any])
-    #expect(Set(json.keys) == ["plan", "checkedSecondsAgo", "stale", "error", "limits"])
+    #expect(Set(json.keys) == ["plan", "checkedAt", "stale", "error", "limits"])
 }
 
 @Test func cliLinkOnlyManagesItsOwnLink() throws {
@@ -321,6 +321,13 @@ private struct StubProvider: Provider {
     #expect(link.state == .installed)
     try link.uninstall()
     #expect(link.state == .missing)
+
+    // A headroom-cli outside an app bundle was linked by hand.
+    try FileManager.default.createSymbolicLink(atPath: link.link.path, withDestinationPath: dir.appendingPathComponent("tools/headroom-cli").path)
+    #expect(link.state == .foreign)
+    link.repairIfStale()
+    #expect(link.state == .foreign)
+    try FileManager.default.removeItem(at: link.link)
 
     // Someone else's file is refused, and survives an uninstall, until the
     // user agrees to replace it.

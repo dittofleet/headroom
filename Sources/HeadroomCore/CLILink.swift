@@ -47,7 +47,9 @@ public struct CLILink: Sendable {
         guard let type = (try? files.attributesOfItem(atPath: link.path))?[.type] as? FileAttributeType else { return .missing }
         guard type == .typeSymbolicLink, let target = try? files.destinationOfSymbolicLink(atPath: link.path) else { return .foreign }
         if target == binary.path { return .installed }
-        return URL(fileURLWithPath: target).lastPathComponent == Self.binaryName ? .stale : .foreign
+        // Another app bundle's CLI. A headroom-cli anywhere else was put
+        // there by hand, and is left alone.
+        return target.hasSuffix(".app/Contents/MacOS/\(Self.binaryName)") ? .stale : .foreign
     }
 
     /// `replacing` is the user's consent to take over a foreign file.
@@ -75,8 +77,10 @@ public struct CLILink: Sendable {
 
     /// Removes the link only if it is Headroom's.
     public func uninstall() throws {
-        guard state == .installed || state == .stale else { return }
-        try FileManager.default.removeItem(at: link)
+        switch state {
+        case .installed, .stale: try FileManager.default.removeItem(at: link)
+        case .missing, .foreign: break
+        }
     }
 
     /// Consent was given when the link was installed, so this is silent.

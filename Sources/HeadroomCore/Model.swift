@@ -104,6 +104,9 @@ public protocol Provider: Sendable {
     func fetch() async -> Result<Snapshot, FetchFailure>
 }
 
+/// Every provider, in menu order.
+public let allProviders: [any Provider] = [ClaudeProvider(), CodexProvider()]
+
 public struct ProviderState: Codable, Sendable {
     public var snapshot: Snapshot?
     public var lastError: String?
