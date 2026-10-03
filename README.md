@@ -190,3 +190,19 @@ then.
 /Applications/Headroom.app/Contents/MacOS/Headroom --print               # fetch once, print as text
 /Applications/Headroom.app/Contents/MacOS/Headroom --render out.png      # draw the menu from cached state (--dark)
 ```
+
+## Code layout
+
+| Path | What it is | Used by |
+| --- | --- | --- |
+| `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting. No platform code. | everything |
+| `Sources/HeadroomMac` | Borrowing Claude Code's and the Codex CLI's sessions, updating the app, the `headroom` link. | Mac app, CLI |
+| `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app |
+| `Sources/Headroom` | The menu bar app. | |
+| `Sources/headroom-cli` | The `headroom` command. | |
+| `iOS/` | The iPhone app and its widgets, an Xcode project on top of the package. | |
+| `skills/headroom` | The agent skill. | |
+
+Each library has its own test target in `Tests/`, so `swift test` covers
+all three. A new platform would need only `HeadroomCore`, plus
+`HeadroomAccounts` if it has no CLI to borrow a session from.

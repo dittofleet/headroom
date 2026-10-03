@@ -1,6 +1,6 @@
 import Foundation
 
-enum HTTP {
+package enum HTTP {
     private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
@@ -24,14 +24,14 @@ enum HTTP {
     /// GET returning the body on 200, or a failure that carries the server's
     /// retry-after when it sent one. `authHint` is the message for a 401 or
     /// 403.
-    static func get(_ url: URL, headers: [String: String], authHint: String) async -> Result<Data, FetchFailure> {
+    package static func get(_ url: URL, headers: [String: String], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
         return await send(request, authHint: authHint)
     }
 
     /// POST a JSON body, with the same outcomes as `get`.
-    static func post(_ url: URL, json: [String: Any], authHint: String) async -> Result<Data, FetchFailure> {
+    package static func post(_ url: URL, json: [String: Any], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -40,7 +40,7 @@ enum HTTP {
     }
 
     /// POST a form body, for the token endpoints that take no JSON.
-    static func post(_ url: URL, form: [(String, String)], authHint: String) async -> Result<Data, FetchFailure> {
+    package static func post(_ url: URL, form: [(String, String)], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -77,29 +77,29 @@ enum HTTP {
     }
 }
 
-enum Parse {
+package enum Parse {
     private static let iso = ISO8601DateFormatter()
 
     /// ISO 8601 with any number of fractional digits, which
     /// ISO8601DateFormatter does not reliably accept.
-    static func isoDate(_ value: Any?) -> Date? {
+    package static func isoDate(_ value: Any?) -> Date? {
         guard let string = value as? String else { return nil }
         let trimmed = string.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
         return iso.date(from: trimmed)
     }
 
-    static func epochDate(_ value: Any?) -> Date? {
+    package static func epochDate(_ value: Any?) -> Date? {
         guard let seconds = number(value), seconds > 0 else { return nil }
         return Date(timeIntervalSince1970: seconds)
     }
 
-    static func number(_ value: Any?) -> Double? {
+    package static func number(_ value: Any?) -> Double? {
         // NSNumber also wraps JSON booleans; a bool is never a percentage.
         guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
         return number.doubleValue
     }
 
-    static func object(_ data: Data) -> [String: Any]? {
+    package static func object(_ data: Data) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 }

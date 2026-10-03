@@ -1,5 +1,6 @@
 import Foundation
 import HeadroomCore
+import HeadroomMac
 
 // Shipped inside Headroom.app and linked onto the PATH as `headroom`. It
 // only reads what the running app last saved: fetching from here would

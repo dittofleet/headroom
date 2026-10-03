@@ -1,5 +1,6 @@
 import AppKit
 import HeadroomCore
+import HeadroomMac
 
 let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 

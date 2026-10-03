@@ -1,5 +1,5 @@
-#if os(macOS)
 import Foundation
+import HeadroomCore
 import Security
 
 /// A release version, vX.Y.Z. The release workflow only tags that shape, so
@@ -155,4 +155,3 @@ public struct Updater: Sendable {
         return (info as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
     }
 }
-#endif

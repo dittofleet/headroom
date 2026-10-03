@@ -1,5 +1,6 @@
 import AppKit
 import HeadroomCore
+import HeadroomMac
 
 /// Keeps the installed app current: checks a few times a day and installs
 /// what it finds. The new copy is on disk from then on, and takes over when

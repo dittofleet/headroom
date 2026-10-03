@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import HeadroomCore
+@testable import HeadroomMac
 
 @Test func versionsParseAndOrder() throws {
     #expect(Version("v1.2.3")?.description == "v1.2.3")

@@ -1,5 +1,6 @@
 import AppKit
 import HeadroomCore
+import HeadroomMac
 
 extension Level {
     var color: NSColor? {

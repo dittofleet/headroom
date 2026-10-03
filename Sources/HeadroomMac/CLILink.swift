@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 
 /// The `headroom` command: a link in the user's bin folder to the CLI inside
@@ -89,4 +88,3 @@ public struct CLILink: Sendable {
         if state == .stale { try? install() }
     }
 }
-#endif

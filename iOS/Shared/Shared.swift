@@ -1,4 +1,5 @@
 import Foundation
+import HeadroomAccounts
 import HeadroomCore
 
 /// What the app and its widgets share: one app group, holding the cache

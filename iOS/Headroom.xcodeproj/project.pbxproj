@@ -10,6 +10,8 @@
 		AA0000000000000000000101 /* HeadroomWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* HeadroomWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeaderOnCopy, ); }; };
 		AA0000000000000000000102 /* HeadroomCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000901 /* HeadroomCore */; };
 		AA0000000000000000000103 /* HeadroomCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000902 /* HeadroomCore */; };
+		AA0000000000000000000104 /* HeadroomAccounts in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000903 /* HeadroomAccounts */; };
+		AA0000000000000000000105 /* HeadroomAccounts in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000904 /* HeadroomAccounts */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +62,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000102 /* HeadroomCore in Frameworks */,
+				AA0000000000000000000104 /* HeadroomAccounts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,6 +71,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000103 /* HeadroomCore in Frameworks */,
+				AA0000000000000000000105 /* HeadroomAccounts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,6 +136,7 @@
 			name = Headroom;
 			packageProductDependencies = (
 				AA0000000000000000000901 /* HeadroomCore */,
+				AA0000000000000000000903 /* HeadroomAccounts */,
 			);
 			productName = Headroom;
 			productReference = AA0000000000000000000011 /* Headroom.app */;
@@ -156,6 +161,7 @@
 			name = HeadroomWidgets;
 			packageProductDependencies = (
 				AA0000000000000000000902 /* HeadroomCore */,
+				AA0000000000000000000904 /* HeadroomAccounts */,
 			);
 			productName = HeadroomWidgets;
 			productReference = AA0000000000000000000012 /* HeadroomWidgets.appex */;
@@ -335,6 +341,14 @@
 		AA0000000000000000000902 /* HeadroomCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HeadroomCore;
+		};
+		AA0000000000000000000903 /* HeadroomAccounts */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HeadroomAccounts;
+		};
+		AA0000000000000000000904 /* HeadroomAccounts */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HeadroomAccounts;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

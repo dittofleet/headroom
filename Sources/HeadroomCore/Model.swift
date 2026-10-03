@@ -118,11 +118,6 @@ public protocol Provider: Sendable {
     func fetch() async -> Result<Snapshot, FetchFailure>
 }
 
-#if os(macOS)
-/// Every provider, in menu order.
-public let allProviders: [any Provider] = [ClaudeProvider(), CodexProvider()]
-#endif
-
 /// Where a limit stands: fine, needing attention, or nearly gone.
 public enum Level: Sendable {
     case normal, warning, critical

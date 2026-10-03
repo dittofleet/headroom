@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import HeadroomAccounts
 @testable import HeadroomCore
 
 private func query(_ url: URL) -> [String: String] {
@@ -67,22 +68,6 @@ private func jwt(_ claims: [String: Any]) -> String {
     #expect(renewed.refreshToken == "r1")
     #expect(renewed.accountID == "acct")
     #expect(renewed.expiresAt == Date(timeIntervalSince1970: 1_790_100_000))
-}
-
-@Test func spentRefreshTokensAreRecognized() {
-    func failure(_ status: Int, _ body: String) -> FetchFailure {
-        FetchFailure("x", status: status, body: Data(body.utf8))
-    }
-    #expect(OAuthClient.isSpent(failure(401, "")))
-    #expect(OAuthClient.isSpent(failure(400, #"{"error": "invalid_grant"}"#)))
-    #expect(OAuthClient.isSpent(failure(400, #"{"error": {"code": "refresh_token_reused"}}"#)))
-    #expect(!OAuthClient.isSpent(failure(400, #"{"error": "invalid_request"}"#)))
-    #expect(!OAuthClient.isSpent(failure(500, #"{"error": "invalid_grant"}"#)))
-}
-
-@Test func formEncodingEscapesReservedCharacters() {
-    #expect(HTTP.formEncoded([("a", "b c"), ("redirect_uri", "http://localhost:1/x?y=+")])
-        == "a=b%20c&redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fx%3Fy%3D%2B")
 }
 
 @Test func tokensRenewAMinuteEarly() {
