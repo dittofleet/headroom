@@ -218,9 +218,37 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 }
 
 private struct StubProvider: Provider {
-    let id = "stub", name = "Stub", glyph = "S"
+    var id = "stub", name = "Stub", glyph = "S"
     let usageURL = URL(string: "https://example.com")!
     func fetch() async -> Result<Snapshot, FetchFailure> { .failure(FetchFailure("unused")) }
+}
+
+@MainActor @Test func enginesSharingACacheKeepEachOthersState() throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent("headroom-test-\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let claude = StubProvider(id: "claude"), codex = StubProvider(id: "codex")
+    // Two processes, as the iOS app and its widgets, both started before either fetched.
+    let app = Engine(providers: [claude, codex], cacheFile: file)
+    let widget = Engine(providers: [claude, codex], cacheFile: file)
+    widget.apply(.failure(FetchFailure("Rate limited", retryAfter: 600)), to: codex, now: now)
+    let snapshot = Snapshot(limits: [Limit(kind: .session, label: "Session", percent: 10, resetsAt: nil, windowSeconds: nil)], plan: nil, fetchedAt: now)
+    app.apply(.success(snapshot), to: claude, now: now)
+    // The app's save kept the widget's cooldown for Codex.
+    let reread = Engine(providers: [claude, codex], cacheFile: file)
+    #expect(reread.state(claude).snapshot == snapshot)
+    #expect(reread.state(codex).throttledUntil == now.addingTimeInterval(600))
+}
+
+@MainActor @Test func clearingKeepsAServerCooldown() {
+    let provider = StubProvider()
+    let engine = Engine(providers: [provider], cacheFile: nil)
+    let snapshot = Snapshot(limits: [Limit(kind: .session, label: "Session", percent: 10, resetsAt: nil, windowSeconds: nil)], plan: nil, fetchedAt: now)
+    engine.apply(.success(snapshot), to: provider, now: now)
+    engine.apply(.failure(FetchFailure("Rate limited", retryAfter: 600)), to: provider, now: now)
+    engine.clear(provider)
+    #expect(engine.state(provider).snapshot == nil)
+    #expect(!engine.isDue(provider, manual: true, now: now.addingTimeInterval(300)))
+    #expect(engine.isDue(provider, manual: true, now: now.addingTimeInterval(601)))
 }
 
 @MainActor @Test func engineHonorsCooldownsAndKeepsLastGoodData() {

@@ -3,7 +3,11 @@ import PackageDescription
 
 let package = Package(
     name: "headroom",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v13), .iOS(.v17)],
+    products: [
+        // For the iOS app in iOS/, which Xcode builds rather than SwiftPM.
+        .library(name: "HeadroomCore", targets: ["HeadroomCore"]),
+    ],
     targets: [
         .target(name: "HeadroomCore"),
         .executableTarget(name: "Headroom", dependencies: ["HeadroomCore"]),

@@ -1,29 +1,23 @@
 import Foundation
 
 /// ChatGPT plan usage for Codex, from the endpoint behind Codex's /status.
-/// Auth is the Codex CLI's own token from auth.json, read-only for the same
-/// reason as Claude's.
-public struct CodexProvider: Provider {
+/// On the Mac, auth is the Codex CLI's own token from auth.json, read-only
+/// for the same reason as Claude's. Elsewhere it is a session of our own:
+/// see `CodexAccountProvider`.
+public struct CodexProvider {
     public let id = "codex"
     public let name = "Codex"
     public let glyph = "X"
     public let usageURL = URL(string: "https://chatgpt.com/codex/settings/usage")!
 
-    private static let endpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+    static let endpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
     public init() {}
 
-    public func fetch() async -> Result<Snapshot, FetchFailure> {
-        guard let data = try? Data(contentsOf: Self.authFile), let creds = Self.parseCredentials(data) else {
-            return .failure(FetchFailure("Not signed in to Codex"))
-        }
-        var headers = ["Authorization": "Bearer \(creds.token)", "User-Agent": "headroom"]
-        if let accountID = creds.accountID { headers["chatgpt-account-id"] = accountID }
-
-        let result = await HTTP.get(Self.endpoint, headers: headers, authHint: "Login expired, refreshes when Codex next runs")
-        return result.flatMap { data in
-            Self.parse(data, now: Date()).map { .success($0) } ?? .failure(FetchFailure("Unrecognized response"))
-        }
+    static func headers(token: String, accountID: String?) -> [String: String] {
+        var headers = ["Authorization": "Bearer \(token)", "User-Agent": "headroom"]
+        if let accountID { headers["chatgpt-account-id"] = accountID }
+        return headers
     }
 
     static func parseCredentials(_ data: Data) -> (token: String, accountID: String?)? {
@@ -31,12 +25,6 @@ public struct CodexProvider: Provider {
               let token = tokens["access_token"] as? String, !token.isEmpty
         else { return nil }
         return (token, tokens["account_id"] as? String)
-    }
-
-    private static var authFile: URL {
-        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
-        return home.appendingPathComponent("auth.json")
     }
 
     public static func parse(_ data: Data, now: Date) -> Snapshot? {
@@ -93,3 +81,23 @@ public struct CodexProvider: Provider {
         return (.other, days >= 1 ? "\(Int(days.rounded()))-day" : "\(Int((seconds / 3600).rounded()))-hour")
     }
 }
+
+#if os(macOS)
+extension CodexProvider: Provider {
+    public func fetch() async -> Result<Snapshot, FetchFailure> {
+        guard let data = try? Data(contentsOf: Self.authFile), let creds = Self.parseCredentials(data) else {
+            return .failure(FetchFailure("Not signed in to Codex"))
+        }
+        let result = await HTTP.get(Self.endpoint, headers: Self.headers(token: creds.token, accountID: creds.accountID), authHint: "Login expired, refreshes when Codex next runs")
+        return result.flatMap { data in
+            Self.parse(data, now: Date()).map { .success($0) } ?? .failure(FetchFailure("Unrecognized response"))
+        }
+    }
+
+    private static var authFile: URL {
+        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+        return home.appendingPathComponent("auth.json")
+    }
+}
+#endif

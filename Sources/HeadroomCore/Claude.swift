@@ -1,54 +1,23 @@
 import Foundation
 
 /// Claude subscription usage, from the endpoint behind Claude Code's /usage.
-/// Auth is Claude Code's own OAuth token. Once it has expired we renew it the
-/// way Claude Code would, and store the result back where Claude Code keeps
-/// it, so the two keep sharing one session instead of logging each other out.
-public struct ClaudeProvider: Provider {
+/// On the Mac, auth is Claude Code's own OAuth token. Once it has expired we
+/// renew it the way Claude Code would, and store the result back where
+/// Claude Code keeps it, so the two keep sharing one session instead of
+/// logging each other out. Elsewhere it is a session of our own: see
+/// `ClaudeAccountProvider`.
+public struct ClaudeProvider {
     public let id = "claude"
     public let name = "Claude"
     public let glyph = "C"
     public let usageURL = URL(string: "https://claude.ai/settings/usage")!
 
-    private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     static let signInAdvice = "sign in again with `claude login`"
 
     public init() {}
-
-    public func fetch() async -> Result<Snapshot, FetchFailure> {
-        guard var creds = await Self.credentials() else {
-            return .failure(FetchFailure("Not signed in to Claude Code"))
-        }
-        // An expired token is a guaranteed 401 that would still spend the
-        // endpoint's small request quota, so it is not sent.
-        var result = creds.isLive(at: Date())
-            ? await Self.usage(creds)
-            : .failure(FetchFailure("Token expired", status: 401))
-        if case .failure(let failure) = result, failure.status == 401 {
-            switch await TokenRenewer.shared.renew(creds) {
-            case .success(let fresh): creds = fresh
-            case .failure(let failure): return .failure(failure)
-            }
-            result = await Self.usage(creds)
-        }
-        let parsed = result.flatMap { data in
-            Self.parse(data, now: Date()).map(Result.success) ?? .failure(FetchFailure("Unrecognized response"))
-        }
-        guard case .success(var snapshot) = parsed else { return parsed }
-        snapshot.plan = await PlanLookup.shared.plan(creds) ?? creds.plan
-        return .success(snapshot)
-    }
-
-    private static func usage(_ creds: Credentials) async -> Result<Data, FetchFailure> {
-        await HTTP.get(
-            endpoint,
-            headers: oauthHeaders(creds).merging(["Content-Type": "application/json"]) { $1 },
-            authHint: "Token rejected, \(signInAdvice)"
-        )
-    }
-
-    static func oauthHeaders(_ creds: Credentials) -> [String: String] {
-        ["Authorization": "Bearer \(creds.token)", "anthropic-beta": "oauth-2025-04-20"]
+    static func oauthHeaders(token: String) -> [String: String] {
+        ["Authorization": "Bearer \(token)", "anthropic-beta": "oauth-2025-04-20"]
     }
 
     // MARK: Parsing
@@ -140,7 +109,7 @@ public struct ClaudeProvider: Provider {
 
     /// Max comes in sizes, and a Team seat can be a premium one. The rate
     /// limit tier is what tells them apart.
-    static func planName(_ subscription: String?, tier: String?) -> String? {
+    public static func planName(_ subscription: String?, tier: String?) -> String? {
         guard let subscription, !subscription.isEmpty else { return nil }
         switch (subscription, tier) {
         case ("max", let tier?):
@@ -164,6 +133,7 @@ public struct ClaudeProvider: Provider {
         return planName(String(type.dropFirst("claude_".count)), tier: organization["rate_limit_tier"] as? String)
     }
 
+    #if os(macOS)
     static let keychainService = "Claude Code-credentials"
     static let configDirectory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
     static let sources: [Credentials.Source] = [
@@ -198,6 +168,7 @@ public struct ClaudeProvider: Provider {
         }
         return data.flatMap { parseCredentials($0, source: source) }
     }
+    #endif
 
     // MARK: Renewal
 
@@ -245,12 +216,48 @@ public struct ClaudeProvider: Provider {
     }
 }
 
+#if os(macOS)
+extension ClaudeProvider: Provider {
+    public func fetch() async -> Result<Snapshot, FetchFailure> {
+        guard var creds = await Self.credentials() else {
+            return .failure(FetchFailure("Not signed in to Claude Code"))
+        }
+        // An expired token is a guaranteed 401 that would still spend the
+        // endpoint's small request quota, so it is not sent.
+        var result = creds.isLive(at: Date())
+            ? await Self.usage(creds)
+            : .failure(FetchFailure("Token expired", status: 401))
+        if case .failure(let failure) = result, failure.status == 401 {
+            switch await TokenRenewer.shared.renew(creds) {
+            case .success(let fresh): creds = fresh
+            case .failure(let failure): return .failure(failure)
+            }
+            result = await Self.usage(creds)
+        }
+        let parsed = result.flatMap { data in
+            Self.parse(data, now: Date()).map(Result.success) ?? .failure(FetchFailure("Unrecognized response"))
+        }
+        guard case .success(var snapshot) = parsed else { return parsed }
+        snapshot.plan = await PlanLookup.shared.plan(token: creds.token, scopes: creds.scopes) ?? creds.plan
+        return .success(snapshot)
+    }
+
+    private static func usage(_ creds: Credentials) async -> Result<Data, FetchFailure> {
+        await HTTP.get(
+            endpoint,
+            headers: oauthHeaders(token: creds.token).merging(["Content-Type": "application/json"]) { $1 },
+            authHint: "Token rejected, \(signInAdvice)"
+        )
+    }
+}
+#endif
+
 /// Asks for the account's plan when the token changes and otherwise at most
 /// hourly: plans rarely change, and every poll already costs a request.
 actor PlanLookup {
     static let shared = PlanLookup()
 
-    private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/profile")!
+    static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/profile")!
     private static let askAgainAfter: TimeInterval = 3600
     private static let retryAfter: TimeInterval = 10 * 60
 
@@ -263,14 +270,14 @@ actor PlanLookup {
 
     /// Nil until the profile has answered, in which case the stored plan is
     /// the best there is.
-    func plan(_ creds: ClaudeProvider.Credentials) async -> String? {
+    func plan(token: String, scopes: [String]) async -> String? {
         // A token without the profile scope would only be refused.
-        guard creds.scopes.isEmpty || creds.scopes.contains("user:profile") else { return nil }
-        guard !asking, creds.token != askedWith || Date() >= nextAsk else { return plan }
+        guard scopes.isEmpty || scopes.contains("user:profile") else { return nil }
+        guard !asking, token != askedWith || Date() >= nextAsk else { return plan }
         asking = true
         defer { asking = false }
-        askedWith = creds.token
-        let response = await HTTP.get(Self.endpoint, headers: ClaudeProvider.oauthHeaders(creds), authHint: "Token rejected")
+        askedWith = token
+        let response = await HTTP.get(Self.endpoint, headers: ClaudeProvider.oauthHeaders(token: token), authHint: "Token rejected")
         if case .success(let data) = response, let answer = ClaudeProvider.parseProfile(data) {
             plan = answer
             nextAsk = Date().addingTimeInterval(Self.askAgainAfter)
@@ -281,18 +288,17 @@ actor PlanLookup {
     }
 }
 
+#if os(macOS)
 /// Renews an expired Claude Code token, one at a time and never while
 /// Claude Code itself is doing the same.
 actor TokenRenewer {
     static let shared = TokenRenewer()
 
-    private static let tokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
     /// Claude Code's own OAuth client: the refresh token was issued to it.
-    private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    private static let client = OAuthClient.claude
     /// Claude Code takes this directory as a lock around its own refresh and
     /// treats one older than a minute as abandoned. We do the same.
     private static let lock = ClaudeProvider.configDirectory.appendingPathComponent(".oauth_refresh.lock")
-    private static let lockStaleAfter: TimeInterval = 60
 
     /// Refresh tokens the server has already rejected. Asking again only
     /// gets the same answer, and it stays that way until a new sign-in.
@@ -317,10 +323,10 @@ actor TokenRenewer {
         if case .keychain(account: nil) = creds.source {
             return .failure(FetchFailure("Token expired, refreshes when Claude Code next runs"))
         }
-        guard Self.takeLock() else {
+        guard DirectoryLock.take(Self.lock) else {
             return .failure(FetchFailure("Token expired, Claude Code is renewing it"))
         }
-        defer { try? FileManager.default.removeItem(at: Self.lock) }
+        defer { DirectoryLock.release(Self.lock) }
 
         // Claude Code may have renewed since we read, in which case the
         // stored token is already a different, live one.
@@ -328,14 +334,14 @@ actor TokenRenewer {
             return .success(current)
         }
 
-        var body: [String: Any] = ["grant_type": "refresh_token", "refresh_token": refreshToken, "client_id": Self.clientID]
+        var body: [String: Any] = ["grant_type": "refresh_token", "refresh_token": refreshToken, "client_id": Self.client.clientID]
         if !creds.scopes.isEmpty { body["scope"] = creds.scopes.joined(separator: " ") }
         let now = Date()
         let data: Data
-        switch await HTTP.post(Self.tokenURL, json: body, authHint: signedOut.message) {
+        switch await HTTP.post(Self.client.tokenURL, json: body, authHint: signedOut.message) {
         case .success(let body):
             data = body
-        case .failure(let failure) where failure.status == 401 || Self.isInvalidGrant(failure):
+        case .failure(let failure) where OAuthClient.isSpent(failure):
             dead.insert(refreshToken)
             return .failure(signedOut)
         case .failure(let failure):
@@ -356,23 +362,6 @@ actor TokenRenewer {
         }
         lastIssued = renewed.token
         return .success(renewed)
-    }
-
-    /// The refresh token itself is gone: revoked, superseded, or expired. Any
-    /// other 400 is about the request and not the session.
-    private static func isInvalidGrant(_ failure: FetchFailure) -> Bool {
-        failure.status == 400 && failure.body.flatMap(Parse.object).map { $0["error"] as? String == "invalid_grant" } ?? false
-    }
-
-    private static func takeLock() -> Bool {
-        let fm = FileManager.default
-        try? fm.createDirectory(at: lock.deletingLastPathComponent(), withIntermediateDirectories: true)
-        func create() -> Bool { (try? fm.createDirectory(at: lock, withIntermediateDirectories: false)) != nil }
-        if create() { return true }
-        let modified = (try? fm.attributesOfItem(atPath: lock.path)[.modificationDate] as? Date) ?? .distantPast
-        guard Date().timeIntervalSince(modified) > lockStaleAfter else { return false }
-        try? fm.removeItem(at: lock)
-        return create()
     }
 
     private static func store(_ document: Data, to source: ClaudeProvider.Credentials.Source) async -> Bool {
@@ -429,3 +418,4 @@ enum Subprocess {
         }
     }
 }
+#endif

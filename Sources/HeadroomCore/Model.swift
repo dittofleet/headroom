@@ -52,8 +52,9 @@ public struct Snapshot: Codable, Equatable, Sendable {
     /// trusted at a glance.
     public static let staleAfter: TimeInterval = 20 * 60
 
-    public func isStale(at now: Date) -> Bool {
-        now.timeIntervalSince(fetchedAt) > Self.staleAfter
+    /// `threshold` is for where refreshes are further apart, like widgets.
+    public func isStale(at now: Date, after threshold: TimeInterval = staleAfter) -> Bool {
+        now.timeIntervalSince(fetchedAt) > threshold
     }
 
     /// When the first window rolls over, after which these numbers are
@@ -77,7 +78,20 @@ public struct Snapshot: Codable, Equatable, Sendable {
         let front = headline(at: now)
         return limits.filter { $0.kind == .weekly && $0 != front }
     }
+
+    /// What a stored choice shows as: `stackedChoice`, or the label of the
+    /// limit leading. A Stacked choice with nothing left to stack shows the
+    /// plain session.
+    public func shownChoice(_ choice: String?, at now: Date) -> String? {
+        if choice == stackedChoice, !stackedBehindHeadline(at: now).isEmpty { return stackedChoice }
+        return headline(at: now, preferring: choice)?.label
+    }
 }
+
+/// The choice of what a provider leads with that shows the session with the
+/// weekly limits behind it, rather than a single limit. Stored in place of
+/// a limit's label, on the Mac for the menu bar and on iOS for the widgets.
+public let stackedChoice = "Stacked"
 
 public struct FetchFailure: Error, Sendable {
     public var message: String
@@ -104,8 +118,19 @@ public protocol Provider: Sendable {
     func fetch() async -> Result<Snapshot, FetchFailure>
 }
 
+#if os(macOS)
 /// Every provider, in menu order.
 public let allProviders: [any Provider] = [ClaudeProvider(), CodexProvider()]
+#endif
+
+/// Where a limit stands: fine, needing attention, or nearly gone.
+public enum Level: Sendable {
+    case normal, warning, critical
+
+    public init(percent: Double) {
+        self = percent >= Limit.criticalPercent ? .critical : percent >= Limit.warningPercent ? .warning : .normal
+    }
+}
 
 public struct ProviderState: Codable, Sendable {
     public var snapshot: Snapshot?
@@ -117,6 +142,13 @@ public struct ProviderState: Codable, Sendable {
     public var throttledUntil: Date = .distantPast
 
     public init() {}
+
+    /// Why the last refresh failed, and when the next is due.
+    public func notice(at now: Date) -> String? {
+        guard let lastError else { return nil }
+        let wait = nextFetchAt.timeIntervalSince(now)
+        return wait > 0 ? "\(lastError) · retry in \(Format.duration(wait))" : lastError
+    }
 
     /// Tolerates missing keys, so a cache written by another version still
     /// loads: losing it would also lose a server cooldown.

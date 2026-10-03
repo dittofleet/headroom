@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Security
 
@@ -154,3 +155,4 @@ public struct Updater: Sendable {
         return (info as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
     }
 }
+#endif

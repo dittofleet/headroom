@@ -39,6 +39,26 @@ enum HTTP {
         return await send(request, authHint: authHint)
     }
 
+    /// POST a form body, for the token endpoints that take no JSON.
+    static func post(_ url: URL, form: [(String, String)], authHint: String) async -> Result<Data, FetchFailure> {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(formEncoded(form).utf8)
+        return await send(request, authHint: authHint)
+    }
+
+    /// `application/x-www-form-urlencoded`, which leaves fewer characters
+    /// bare than a URL query does.
+    static func formEncoded(_ pairs: [(String, String)]) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        func escape(_ string: String) -> String {
+            string.addingPercentEncoding(withAllowedCharacters: allowed) ?? string
+        }
+        return pairs.map { "\(escape($0.0))=\(escape($0.1))" }.joined(separator: "&")
+    }
+
     private static func send(_ request: URLRequest, authHint: String) async -> Result<Data, FetchFailure> {
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse
