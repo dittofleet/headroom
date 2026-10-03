@@ -1,13 +1,8 @@
 import AppKit
 import HeadroomCore
+import HeadroomMac
 
-enum Level {
-    case normal, warning, critical
-
-    init(percent: Double) {
-        self = percent >= Limit.criticalPercent ? .critical : percent >= Limit.warningPercent ? .warning : .normal
-    }
-
+extension Level {
     var color: NSColor? {
         switch self {
         case .normal: return nil
@@ -262,10 +257,6 @@ func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntr
     return entries
 }
 
-/// The menu bar choice that shows the session with the weekly limits
-/// behind it, rather than a single limit.
-let stackedChoice = "Stacked"
-
 /// The limits each provider could show in the menu bar, plus Stacked when
 /// there is something to stack, under a heading per provider, with a check
 /// on the one showing now.
@@ -275,16 +266,13 @@ func menuBarChoices(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry
     for (index, provider) in engine.providers.enumerated() {
         guard let snapshot = engine.state(provider).snapshot else { continue }
         let choice = chrome.menuBarLimits[provider.id]
-        let canStack = !snapshot.stackedBehindHeadline(at: now).isEmpty
-        // A stacked choice with nothing left to stack shows the plain session.
-        let stacked = choice == stackedChoice && canStack
-        let showing = stacked ? nil : snapshot.headline(at: now, preferring: choice)
+        let shown = snapshot.shownChoice(choice, at: now)
         entries.append(.info("\(provider.name) in Menu Bar"))
         entries += snapshot.limits.map { limit in
-            .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit == showing, tag: index)
+            .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit.label == shown, tag: index)
         }
-        if canStack {
-            entries.append(.action(title: stackedChoice, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: stacked, tag: index))
+        if !snapshot.stackedBehindHeadline(at: now).isEmpty {
+            entries.append(.action(title: stackedChoice, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: shown == stackedChoice, tag: index))
         }
     }
     return entries
@@ -302,9 +290,8 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
 
         var views: [NSView] = [HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, now: now, detailIsProblem: stale && !fetching)]
         views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale, showPace: showPace) }
-        if let error = state.lastError {
-            let wait = state.nextFetchAt.timeIntervalSince(now)
-            views.append(NoticeView(text: wait > 0 ? "\(error) · retry in \(Format.duration(wait))" : error))
+        if let notice = state.notice(at: now) {
+            views.append(NoticeView(text: notice))
         }
         return views
     }

@@ -1,9 +1,12 @@
-// Draws the app icon and writes AppIcon.icns. Run from the repo root:
+// Draws the app icon and writes AppIcon.icns, plus the iOS app's icon.
+// Run from the repo root:
 //   swift scripts/make-icon.swift
 // The icon is the app in miniature: two usage bars, each with its pace tick.
 import AppKit
 
-func draw(size: CGFloat) -> NSBitmapImageRep {
+/// `fullBleed` is the iOS shape: the body fills the square, and the system
+/// rounds the corners.
+func draw(size: CGFloat, fullBleed: Bool = false) -> NSBitmapImageRep {
     let rep = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: Int(size), pixelsHigh: Int(size), bitsPerSample: 8,
         samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -13,17 +16,28 @@ func draw(size: CGFloat) -> NSBitmapImageRep {
 
     // The standard macOS icon shape: 824pt rounded square on a 1024pt canvas.
     let body = NSRect(x: 100 * unit, y: 100 * unit, width: 824 * unit, height: 824 * unit)
-    let shape = NSBezierPath(roundedRect: body, xRadius: 185 * unit, yRadius: 185 * unit)
-    NSGraphicsContext.saveGraphicsState()
-    let shadow = NSShadow()
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
-    shadow.shadowOffset = NSSize(width: 0, height: -10 * unit)
-    shadow.shadowBlurRadius = 24 * unit
-    shadow.set()
-    NSColor.black.setFill()
-    shape.fill()
-    NSGraphicsContext.restoreGraphicsState()
-    NSGradient(starting: NSColor(white: 0.24, alpha: 1), ending: NSColor(white: 0.11, alpha: 1))!.draw(in: shape, angle: -90)
+    let gradient = NSGradient(starting: NSColor(white: 0.24, alpha: 1), ending: NSColor(white: 0.11, alpha: 1))!
+    if fullBleed {
+        gradient.draw(in: NSRect(x: 0, y: 0, width: size, height: size), angle: -90)
+        // Everything below is laid out on the macOS body. Stretch that body
+        // over the whole square.
+        let transform = NSAffineTransform()
+        transform.scale(by: 1024 / 824)
+        transform.translateX(by: -body.minX, yBy: -body.minY)
+        transform.concat()
+    } else {
+        let shape = NSBezierPath(roundedRect: body, xRadius: 185 * unit, yRadius: 185 * unit)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowOffset = NSSize(width: 0, height: -10 * unit)
+        shadow.shadowBlurRadius = 24 * unit
+        shadow.set()
+        NSColor.black.setFill()
+        shape.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        gradient.draw(in: shape, angle: -90)
+    }
 
     func bar(y: CGFloat, fill: CGFloat, color: NSColor, tick: CGFloat) {
         let track = NSRect(x: 232 * unit, y: y * unit, width: 560 * unit, height: 96 * unit)
@@ -44,6 +58,11 @@ func draw(size: CGFloat) -> NSBitmapImageRep {
     NSGraphicsContext.restoreGraphicsState()
     return rep
 }
+
+// iOS takes a single 1024px icon and scales it down itself.
+let iosIcon = URL(fileURLWithPath: "iOS/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
+try FileManager.default.createDirectory(at: iosIcon.deletingLastPathComponent(), withIntermediateDirectories: true)
+try draw(size: 1024, fullBleed: true).representation(using: .png, properties: [:])!.write(to: iosIcon)
 
 let iconset = FileManager.default.temporaryDirectory.appendingPathComponent("AppIcon.iconset")
 try? FileManager.default.removeItem(at: iconset)

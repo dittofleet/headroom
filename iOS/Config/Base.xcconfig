@@ -1,0 +1,20 @@
+// Settings both targets share. Signing needs your own team: put
+//   DEVELOPMENT_TEAM = <your team id>
+// in Config/Local.xcconfig, which git ignores.
+DEVELOPMENT_TEAM =
+#include? "Local.xcconfig"
+
+CODE_SIGN_STYLE = Automatic
+IPHONEOS_DEPLOYMENT_TARGET = 18.0
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 1
+SWIFT_VERSION = 5.0
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+GENERATE_INFOPLIST_FILE = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+// The app group holds the shared cache and renewal locks, and doubles as
+// the keychain access group for the tokens.
+// Info.plist files pass it to the code as HeadroomAppGroup.
+HEADROOM_APP_GROUP = group.io.github.dittofleet.headroom

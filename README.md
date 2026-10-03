@@ -149,9 +149,60 @@ quota. So headroom:
   a cooldown;
 - refuses to run twice.
 
+## iPhone widgets
+
+`iOS/` holds an iPhone app whose only job is to feed widgets: Usage for
+the home screen (small, medium, large) and the lock screen (a Stacked bar
+per provider, or one inline line), and Gauge, a lock screen ring for one
+limit you pick. It isn't published, so you build it onto your own phone
+with Xcode:
+
+1. Put your team in `iOS/Config/Local.xcconfig`, which git ignores:
+   `DEVELOPMENT_TEAM = <your team id>`.
+2. Open `iOS/Headroom.xcodeproj`, pick your phone, and run the Headroom
+   scheme. With someone else's team, change the bundle ids in
+   `iOS/Config/*.xcconfig` and the app group in `Base.xcconfig` to ones
+   you own.
+
+A phone has no Claude Code or Codex to borrow from, so the app signs in
+itself, the way `claude login` and `codex login` do: the provider's own
+page opens in a sheet and redirects back to a listener on the phone's
+localhost. That is a session of its own, so the Mac's is never touched.
+The tokens stay in the phone's keychain, shared only with the widgets.
+Renewals take a lock, so the app and the widgets never rotate a refresh
+token out from under each other.
+
+The widgets refresh as often as iOS lets them, which is about every 15 to
+30 minutes, and the same rules as on the Mac apply. Between fetches the
+pace ticks keep moving and windows that reset drop to 0% on their own.
+Opening the app fetches right away.
+
+To try it in a simulator without signing in, install a debug build there
+and run `swift iOS/scripts/sim-borrow-tokens.swift`. It lends the app this
+Mac's Claude Code and Codex access tokens, but never their refresh tokens,
+so the simulator can't renew and rotate the Mac's sessions. Once a token
+expires, the simulator shows that provider as signed out. Run it again
+then.
+
 ## Diagnostics
 
 ```sh
 /Applications/Headroom.app/Contents/MacOS/Headroom --print               # fetch once, print as text
 /Applications/Headroom.app/Contents/MacOS/Headroom --render out.png      # draw the menu from cached state (--dark)
 ```
+
+## Code layout
+
+| Path | What it is | Used by |
+| --- | --- | --- |
+| `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting. No platform code. | everything |
+| `Sources/HeadroomMac` | Borrowing Claude Code's and the Codex CLI's sessions, updating the app, the `headroom` link. | Mac app, CLI |
+| `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app |
+| `Sources/Headroom` | The menu bar app. | |
+| `Sources/headroom-cli` | The `headroom` command. | |
+| `iOS/` | The iPhone app and its widgets, an Xcode project on top of the package. | |
+| `skills/headroom` | The agent skill. | |
+
+Each library has its own test target in `Tests/`, so `swift test` covers
+all three. A new platform would need only `HeadroomCore`, plus
+`HeadroomAccounts` if it has no CLI to borrow a session from.

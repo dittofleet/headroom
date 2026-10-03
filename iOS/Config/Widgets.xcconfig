@@ -1,0 +1,10 @@
+#include "Base.xcconfig"
+
+PRODUCT_NAME = HeadroomWidgets
+PRODUCT_BUNDLE_IDENTIFIER = io.github.dittofleet.headroom.ios.widgets
+CODE_SIGN_ENTITLEMENTS = Config/Widgets.entitlements
+INFOPLIST_FILE = Config/Widgets-Info.plist
+INFOPLIST_KEY_CFBundleDisplayName = Headroom
+SKIP_INSTALL = YES
+APPLICATION_EXTENSION_API_ONLY = YES
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
