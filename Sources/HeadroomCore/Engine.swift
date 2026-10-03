@@ -15,6 +15,10 @@ public final class Engine {
     static let maxRetryAfter: TimeInterval = 60 * 60
     static let rolloverGrace: TimeInterval = 15
 
+    /// Where the app keeps its state, and where the CLI reads it.
+    nonisolated public static let defaultCacheFile = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("headroom/state.json")
+
     public let providers: [any Provider]
     private var states: [String: ProviderState]
     public var onChange: (() -> Void)?

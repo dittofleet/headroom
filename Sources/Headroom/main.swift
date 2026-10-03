@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs while the menu is open, so "12s ago" and the countdowns move.
     private var ageTicker: Timer?
     private let updates = UpdateController()
+    private let commandLineTool = Bundle.main.executableURL
+        .map { $0.deletingLastPathComponent().appendingPathComponent(CLILink.binaryName) }
+        .flatMap { FileManager.default.fileExists(atPath: $0.path) ? CLILink(binary: $0, binDir: CLILink.userBinDir) : nil }
 
     init(engine: Engine) {
         self.engine = engine
@@ -30,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         engine.onChange = { [weak self] in self?.render() }
         updates.onChange = { [weak self] in self?.render() }
+        // Only from an installed app: a build run from a checkout would
+        // take the link over from the real one.
+        if Bundle.main.bundleURL.pathExtension == "app" { commandLineTool?.repairIfStale() }
+
         render()
         engine.refresh()
         updates.tick()
@@ -85,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             updateReady: updates.installed != nil,
             canUpdate: updates.canUpdate,
             startAtLogin: LoginItem.isEnabled,
+            commandLineTool: commandLineTool?.state,
             showPace: Preferences.showPace,
             showNumbers: Preferences.showNumbers,
             menuBarLimits: Preferences.menuBarLimits
@@ -190,6 +198,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do { try LoginItem.set(enabled: !LoginItem.isEnabled) } catch { LoginItem.openSystemSettings() }
     }
 
+    @objc func installCommandLineTool() {
+        guard let commandLineTool else { return }
+        let path = (commandLineTool.link.path as NSString).abbreviatingWithTildeInPath
+        var replacing = false
+        if commandLineTool.state == .foreign {
+            guard alert("Replace \(path)?", "It already exists and doesn't point at Headroom.", buttons: ["Replace", "Cancel"]) == .alertFirstButtonReturn else { return }
+            replacing = true
+        }
+        do {
+            try commandLineTool.install(replacing: replacing)
+            let folder = (commandLineTool.link.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
+            alert("Installed the headroom command", "It is linked at \(path). If your shell can't find it, add \(folder) to your PATH.")
+        } catch {
+            alert("Couldn't install the command line tool", error.localizedDescription)
+        }
+    }
+
+    @objc func uninstallCommandLineTool() {
+        do { try commandLineTool?.uninstall() } catch {
+            alert("Couldn't uninstall the command line tool", error.localizedDescription)
+        }
+    }
+
+    /// A menu bar app has no window to hang this on, so it comes forward first.
+    @discardableResult
+    private func alert(_ message: String, _ detail: String, buttons: [String] = []) -> NSApplication.ModalResponse {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = detail
+        buttons.forEach { alert.addButton(withTitle: $0) }
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal()
+    }
+
     @objc func restartToUpdate() {
         updates.restart()
     }
@@ -255,8 +297,7 @@ if arguments.contains("--print") {
 }
 
 MainActor.assumeIsolated {
-    let cacheFile = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-        .appendingPathComponent("headroom/state.json")
+    let cacheFile = Engine.defaultCacheFile
 
     if let index = arguments.firstIndex(of: "--render"), let path = arguments.dropFirst(index + 1).first {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.

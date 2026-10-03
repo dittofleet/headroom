@@ -7,6 +7,9 @@ let package = Package(
     targets: [
         .target(name: "HeadroomCore"),
         .executableTarget(name: "Headroom", dependencies: ["HeadroomCore"]),
+        // Not "headroom": it would collide with "Headroom" on a
+        // case-insensitive disk, both in .build and in the app bundle.
+        .executableTarget(name: "headroom-cli", dependencies: ["HeadroomCore"]),
         .testTarget(name: "HeadroomCoreTests", dependencies: ["HeadroomCore"]),
     ]
 )

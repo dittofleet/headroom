@@ -6,6 +6,7 @@ ARCHS ?=
 # is all a local install needs.
 IDENTITY ?=
 APP = dist/Headroom.app
+CLI = $(APP)/Contents/MacOS/headroom-cli
 BUILD = swift build -c release $(ARCHS)
 
 app:
@@ -14,10 +15,15 @@ app:
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	cp "$$($(BUILD) --show-bin-path)/Headroom" $(APP)/Contents/MacOS/Headroom
+	cp "$$($(BUILD) --show-bin-path)/headroom-cli" $(CLI)
 	sed 's/VERSION/$(VERSION:v%=%)/' Info.plist > $(APP)/Contents/Info.plist
+# The CLI is nested code, so it is signed first and on its own: signing the
+# app only seals it, and notarization rejects it unsigned.
 ifeq ($(IDENTITY),)
+	codesign --force --sign - --identifier io.github.dittofleet.headroom.cli $(CLI)
 	codesign --force --sign - $(APP)
 else
+	codesign --force --sign "$(IDENTITY)" --options runtime --timestamp --identifier io.github.dittofleet.headroom.cli $(CLI)
 	codesign --force --sign "$(IDENTITY)" --options runtime --timestamp $(APP)
 endif
 	codesign --verify --strict $(APP)
