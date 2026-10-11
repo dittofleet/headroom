@@ -29,10 +29,10 @@ struct UsageEntry: TimelineEntry {
         row.snapshot?.headline(at: date, preferring: settings.limits[row.id])
     }
 
-    /// The weekly limits drawn behind the headline, when Stacked is chosen.
-    func behind(_ row: Row) -> [Limit] {
+    /// The weekly limits laid over the headline, when Stacked is chosen.
+    func stacked(_ row: Row) -> [Limit] {
         guard settings.limits[row.id] == stackedChoice else { return [] }
-        return row.snapshot?.stackedBehindHeadline(at: date) ?? []
+        return row.snapshot?.stackedOverHeadline(at: date) ?? []
     }
 
     /// Every limit, the headline first.
@@ -133,19 +133,19 @@ struct UsageView: View {
     }
 
     /// The Mac menu bar icon: per provider a letter, the bar of the limit
-    /// it leads with (Stacked draws the weekly limits lighter behind it),
+    /// it leads with (Stacked lays the weekly limits over it),
     /// and the number unless numbers are off.
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(entry.rows, id: \.id) { row in
                 let headline = entry.headline(row)
-                let behind = entry.behind(row)
+                let stacked = entry.stacked(row)
                 HStack(spacing: 6) {
                     Text(row.glyph).font(.caption.weight(.bold)).frame(width: 12)
                     UsageBar(
                         percent: headline?.percent(at: entry.date) ?? 0,
                         pace: entry.settings.showPace ? headline?.elapsedFraction(at: entry.date) : nil,
-                        backdrop: behind.map { $0.percent(at: entry.date) },
+                        overlay: stacked.map { $0.percent(at: entry.date) },
                         tint: .primary
                     )
                     .widgetAccentable()
