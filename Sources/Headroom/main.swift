@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func accessibilitySummary(_ spec: StatusIcon.Spec) -> String {
         zip(engine.providers, spec.rows).map { provider, row in
             let front = [provider.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
-            return ([front] + row.backdrop.map { "\($0.label) \(Format.percent($0.percent))" }).joined(separator: ", ")
+            return ([front] + row.overlay.map { "\($0.label) \(Format.percent($0.percent))" }).joined(separator: ", ")
         }.joined(separator: ". ")
     }
 
