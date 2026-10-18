@@ -211,6 +211,55 @@ private struct StubProvider: Provider {
     #expect(engine.isDue(provider, manual: true, now: now.addingTimeInterval(601)))
 }
 
+/// A fetch that waits until let go, and notes whether it was cancelled.
+private struct GatedProvider: Provider {
+    var id = "gated", name = "Gated", glyph = "G"
+    let usageURL = URL(string: "https://example.com")!
+    let gate = Gate()
+
+    func fetch() async -> Result<Snapshot, FetchFailure> {
+        await gate.wait()
+        await gate.finish(cancelled: Task.isCancelled)
+        return .success(Snapshot(limits: [], plan: nil, fetchedAt: now))
+    }
+
+    actor Gate {
+        private var waiter: CheckedContinuation<Void, Never>?
+        private(set) var started = false
+        /// Nil until the fetch has finished.
+        private(set) var cancelled: Bool?
+
+        func wait() async {
+            started = true
+            await withCheckedContinuation { waiter = $0 }
+        }
+
+        func open() {
+            waiter?.resume()
+            waiter = nil
+        }
+
+        func finish(cancelled: Bool) {
+            self.cancelled = cancelled
+        }
+    }
+}
+
+/// A fetch can be partway through rotating a refresh token, so clearing
+/// lets it finish and only drops what it brings back.
+@MainActor @Test func clearingDropsAFetchUnderWayWithoutCancellingIt() async throws {
+    let provider = GatedProvider()
+    let engine = Engine(providers: [provider], cacheFile: nil)
+    engine.refresh(now: now)
+    while await !provider.gate.started { await Task.yield() }
+    engine.clear(provider)
+    await provider.gate.open()
+    while await provider.gate.cancelled == nil { await Task.yield() }
+    #expect(await provider.gate.cancelled == false)
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(engine.state(provider).snapshot == nil)
+}
+
 @MainActor @Test func engineHonorsCooldownsAndKeepsLastGoodData() {
     let provider = StubProvider()
     let engine = Engine(providers: [provider], cacheFile: nil)

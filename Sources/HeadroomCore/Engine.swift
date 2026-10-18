@@ -38,6 +38,8 @@ public final class Engine {
     /// The fetch under way for each provider, so a refresh that wants to
     /// wait for the numbers can await one it didn't start.
     private var inFlight: [String: Task<Void, Never>] = [:]
+    /// Bumped by `clear`, so a fetch from before lands nowhere.
+    private var generations: [String: Int] = [:]
     /// In memory only: the manual floor is about this process's behavior,
     /// and a relaunch should not inherit it.
     private var lastAttempt: [String: Date] = [:]
@@ -76,9 +78,12 @@ public final class Engine {
 
     /// Forgets a provider's numbers, as after a sign-in or sign-out: they
     /// belonged to a session that is gone, and so does a fetch under way.
-    /// A server cooldown stands, since it may be the account's.
+    /// That fetch still runs to the end, since it may be partway through
+    /// rotating a refresh token, but its result is dropped. A server
+    /// cooldown stands, since it may be the account's.
     public func clear(_ provider: any Provider) {
-        inFlight.removeValue(forKey: provider.id)?.cancel()
+        inFlight[provider.id] = nil
+        generations[provider.id, default: 0] += 1
         lastAttempt[provider.id] = nil
         update(provider.id) { state in
             var cleared = ProviderState()
@@ -112,10 +117,11 @@ public final class Engine {
         let due = providers.filter { isDue($0, manual: manual, now: now) }
         for provider in due {
             lastAttempt[provider.id] = now
+            let generation = generations[provider.id, default: 0]
             inFlight[provider.id] = Task {
                 let result = await provider.fetch()
                 // Cleared while fetching: the result is the old session's.
-                guard !Task.isCancelled else { return }
+                guard self.generations[provider.id, default: 0] == generation else { return }
                 self.apply(result, to: provider)
             }
         }

@@ -39,11 +39,12 @@ public struct OAuthSignIn: Sendable {
     }
 
     /// The code in a request that reached the redirect listener. Nil when
-    /// the request is for something else, such as a favicon.
+    /// the request is for something else, such as a favicon, or an earlier
+    /// attempt's redirect, which must not end this one.
     public func code(fromRequestTarget target: String) -> Result<String, FetchFailure>? {
         guard let components = URLComponents(string: target), components.path == client.callbackPath else { return nil }
         let query = Dictionary((components.queryItems ?? []).map { ($0.name, $0.value ?? "") }) { first, _ in first }
-        guard query["state"] == state else { return .failure(FetchFailure("Sign-in answered for a different attempt")) }
+        guard query["state"] == state else { return nil }
         if let error = query["error"] {
             return .failure(FetchFailure(query["error_description"] ?? error))
         }
@@ -101,12 +102,14 @@ extension OAuthClient {
         switch flavor {
         case .claude:
             guard let renewal = ClaudeProvider.parseRenewal(data, now: now) else { return nil }
+            let account = Parse.object(data)?["account"] as? [String: Any]
             return AccountTokens(
                 accessToken: renewal.token,
                 refreshToken: renewal.refreshToken ?? old?.refreshToken,
                 expiresAt: renewal.expiresAt,
                 scopes: renewal.scopes.isEmpty ? old?.scopes ?? scopes : renewal.scopes,
-                plan: old?.plan
+                plan: old?.plan,
+                email: account?["email_address"] as? String ?? old?.email
             )
         case .codex:
             guard let root = Parse.object(data) else { return nil }
@@ -118,7 +121,8 @@ extension OAuthClient {
                 refreshToken: (root["refresh_token"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? old?.refreshToken,
                 expiresAt: Self.jwtClaims(accessToken).flatMap { Parse.epochDate($0["exp"]) },
                 scopes: old?.scopes ?? scopes,
-                accountID: auth?["chatgpt_account_id"] as? String ?? old?.accountID
+                accountID: auth?["chatgpt_account_id"] as? String ?? old?.accountID,
+                email: idClaims?["email"] as? String ?? old?.email
             )
         }
     }

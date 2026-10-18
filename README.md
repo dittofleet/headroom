@@ -13,16 +13,16 @@ is still listed in the menu. "Stacked" splits the bar in two: the session on
 top, and below it the fullest weekly limit, such as Claude's Fable weekly
 when it is ahead of the general one.
 Rows turn orange at 75% and red at 90%.
-"Show Numbers in Menu Bar" drops the percentages and leaves just the bars,
+"Show numbers in menu bar" drops the percentages and leaves just the bars,
 for a narrower icon.
 
 Click for every limit, when each resets, and a pace tick on each bar: the
 tick is how far through the window the clock is, so a fill past the tick
-means you are burning faster than the window refills. "Show Pace Marker" in
+means you are burning faster than the window refills. "Show pace marker" in
 Settings hides the ticks if you would rather not see them.
 
-It does one thing and is simple about it: no login flow, no dependencies,
-and a short Settings submenu. It borrows the sessions Claude Code and Codex already have,
+It does one thing and is simple about it: no dependencies and a short
+Settings window. It borrows the sessions Claude Code and Codex already have,
 shows you the numbers, and otherwise stays out of the way. Being a single
 small native binary is a side effect of that.
 
@@ -35,16 +35,16 @@ curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/install.sh
 Releases are universal, signed with a Developer ID, and notarized.
 
 This puts `Headroom.app` in `/Applications`, opens it, and turns on
-**Start at Login**, which you can switch off and on under Settings.
+**Start at login**, which you can switch off and on in Settings.
 
 If you download `Headroom.zip` from a release instead, drag the app to
-`/Applications`, open it, and tick Start at Login yourself. To build from a
-checkout, run `make install` inside it (needs the Xcode command line
-tools).
+`/Applications`, open it, and turn on Start at login in Settings yourself.
+To build from a checkout, run `make install` inside it (needs the Xcode
+command line tools).
 
 To uninstall, quit Headroom and move it to the Trash. Nothing is installed
 outside the app, and its login item goes with it. If you installed the
-command line tool, choose "Uninstall Command Line Tool" in Settings first.
+command line tool, uninstall it in Settings first.
 
 ## Updates
 
@@ -88,7 +88,7 @@ It only reads what the app last saved and never fetches, so any number of
 agents can call it without touching the endpoint's small quota. That also
 means the numbers are only fresh while Headroom is running.
 
-To get it, choose "Install Command Line Tool" in Settings. That links
+To get it, install it in Settings under "Command line tool". That links
 `headroom` into `~/.local/bin` to the binary inside the app, so it updates
 with the app. Headroom only ever touches a link it made, and if the app
 moves it repoints that link the next time it starts.
@@ -105,7 +105,8 @@ curl -fsSL https://raw.githubusercontent.com/dittofleet/headroom/HEAD/skills/hea
 
 ## Where the numbers come from
 
-headroom has no login of its own. It borrows the sessions you already have:
+Unless you give it a login of its own (below), headroom borrows the
+credentials your CLIs already have:
 
 - **Claude**: the OAuth token Claude Code keeps in the keychain (or
   `~/.claude/.credentials.json`), against the endpoint behind `/usage`.
@@ -128,11 +129,22 @@ rotate the refresh token out from under each other. When the refresh
 token itself has been revoked, the menu says to sign in again with
 `claude login`.
 
+**Passive mode** in Settings stops that: headroom then only reads Claude
+Code's credentials, and while they are expired the numbers wait for
+Claude Code to refresh them.
+
 Codex's token is only ever read. When it expires the menu says so, and the
 numbers come back the next time you use Codex.
 
 The keychain is read and written through `/usr/bin/security`, which Claude
 Code's keychain item already trusts, so there is no password prompt.
+
+To leave a CLI's credentials alone entirely, choose "Manage credentials
+separately" for that provider in Settings and click Log In. Your browser
+opens to log headroom in on its own, like the iPhone app. Those tokens go
+in your login keychain and headroom refreshes them itself. Logging out
+leaves headroom logged out rather than back on the CLI's credentials, and
+going back to them discards the separate login.
 
 ## Staying out of trouble
 
@@ -197,7 +209,7 @@ then.
 | --- | --- | --- |
 | `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting. No platform code. | everything |
 | `Sources/HeadroomMac` | Borrowing Claude Code's and the Codex CLI's sessions, updating the app, the `headroom` link. | Mac app, CLI |
-| `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app |
+| `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app, Mac app |
 | `Sources/Headroom` | The menu bar app. | |
 | `Sources/headroom-cli` | The `headroom` command. | |
 | `iOS/` | The iPhone app and its widgets, an Xcode project on top of the package. | |
@@ -205,4 +217,5 @@ then.
 
 Each library has its own test target in `Tests/`, so `swift test` covers
 all three. A new platform would need only `HeadroomCore`, plus
-`HeadroomAccounts` if it has no CLI to borrow a session from.
+`HeadroomAccounts` if it has no CLI to borrow a session from, or should
+not touch the CLI's.

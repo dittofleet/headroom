@@ -41,17 +41,14 @@ struct ContentView: View {
         }
     }
 
-    /// The Mac's Settings submenu, for the widgets: what each provider
-    /// leads with, and the two display toggles.
+    /// The Mac's display settings, for the widgets: what each provider
+    /// leads with, and the two toggles.
     private func widgetSettings(now: Date) -> some View {
         Section {
             ForEach(model.providers, id: \.id) { provider in
                 if model.isSignedIn(provider), let snapshot = model.engine.state(provider).snapshot {
                     Picker(provider.name, selection: leadingLimit(provider, snapshot: snapshot, now: now)) {
-                        ForEach(snapshot.limits.map(\.label), id: \.self) { Text($0) }
-                        if snapshot.stackedWeekly(at: now) != nil {
-                            Text(stackedChoice).tag(stackedChoice)
-                        }
+                        ForEach(snapshot.choices(at: now), id: \.self) { Text($0) }
                     }
                 }
             }
