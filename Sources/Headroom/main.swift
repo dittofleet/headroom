@@ -1,6 +1,7 @@
 import AppKit
 import HeadroomCore
 import HeadroomMac
+import SwiftUI
 
 let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 
@@ -10,14 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var menuIsOpen = false
-    /// Open submenus, i.e. Settings. A rebuild would pull one out from
-    /// under the pointer, so it waits until they close.
-    private var openSubmenus = 0
-    private var menuIsBehind = false
     private var iconSpec: StatusIcon.Spec?
     /// Runs while the menu is open, so "12s ago" and the countdowns move.
     private var ageTicker: Timer?
     private let updates = UpdateController()
+    private lazy var settings = SettingsModel(engine: engine, commandLineTool: commandLineTool) { [weak self] in self?.render() }
+    private var settingsWindow: NSWindow?
     /// Only an installed app manages the link: a build run from a checkout
     /// would point it into .build.
     private let commandLineTool = Bundle.main.bundleURL.pathExtension == "app"
@@ -36,7 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         menu.autoenablesItems = false
 
-        engine.onChange = { [weak self] in self?.render() }
+        engine.onChange = { [weak self] in
+            self?.render()
+            if self?.settingsWindow?.isVisible == true { self?.settings.objectWillChange.send() }
+        }
         updates.onChange = { [weak self] in self?.render() }
         commandLineTool?.repairIfStale()
 
@@ -77,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusItem.button?.image = StatusIcon.image(spec)
         }
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(spec))
-        if menuIsOpen { openSubmenus == 0 ? buildMenu(now: now) : (menuIsBehind = true) }
+        if menuIsOpen { buildMenu(now: now) }
     }
 
     /// Reads out what the icon shows, a stacked weekly limit included.
@@ -95,8 +97,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             aboutDetail: updates.detail,
             updateReady: updates.installed != nil,
             canUpdate: updates.canUpdate,
-            startAtLogin: LoginItem.isEnabled,
-            commandLineTool: commandLineTool?.state,
             showPace: Preferences.showPace,
             showNumbers: Preferences.showNumbers,
             menuBarLimits: Preferences.menuBarLimits
@@ -104,13 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func buildMenu(now: Date) {
-        menuIsBehind = false
         menu.removeAllItems()
-        fill(menu, with: menuEntries(engine: engine, chrome: chrome, now: now))
-    }
-
-    private func fill(_ menu: NSMenu, with entries: [MenuEntry]) {
-        for entry in entries {
+        for entry in menuEntries(engine: engine, chrome: chrome, now: now) {
             switch entry {
             case .view(let view):
                 // Rows and dividers only display, so keyboard navigation
@@ -124,22 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 item.isEnabled = false
                 item.toolTip = toolTip
                 menu.addItem(item)
-            case .action(let title, let selector, let key, let checked, let tag):
+            case .action(let title, let selector, let key, let tag):
                 let item = NSMenuItem(title: title, action: selector, keyEquivalent: key)
                 item.target = self
-                item.state = checked ? .on : .off
                 item.tag = tag
                 menu.addItem(item)
-            case .submenu(let title, let entries):
-                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                let submenu = NSMenu(title: title)
-                submenu.autoenablesItems = false
-                submenu.delegate = self
-                fill(submenu, with: entries)
-                item.submenu = submenu
-                menu.addItem(item)
-            case .separator:
-                menu.addItem(.separator())
             }
         }
     }
@@ -147,12 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Menu
 
     func menuWillOpen(_ menu: NSMenu) {
-        guard menu === self.menu else {
-            openSubmenus += 1
-            return
-        }
         menuIsOpen = true
-        openSubmenus = 0
         buildMenu(now: Date())
         // Looking is the moment freshness matters; still bounded by the
         // engine's floor and any server cooldown.
@@ -172,67 +151,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        guard menu === self.menu else {
-            openSubmenus = max(openSubmenus - 1, 0)
-            if menuIsOpen && openSubmenus == 0 && menuIsBehind { buildMenu(now: Date()) }
-            return
-        }
         menuIsOpen = false
         ageTicker?.invalidate()
         ageTicker = nil
     }
 
-    @objc func toggleShowPace() {
-        Preferences.showPace.toggle()
-    }
-
-    @objc func toggleShowNumbers() {
-        Preferences.showNumbers.toggle()
-        render()
-    }
-
-    /// The item's title is the limit's label or `stackedChoice`, and its tag
-    /// the provider.
-    @objc func chooseMenuBarLimit(_ sender: NSMenuItem) {
-        Preferences.menuBarLimits[engine.providers[sender.tag].id] = sender.title
-        render()
-    }
-
-    @objc func toggleStartAtLogin() {
-        do { try LoginItem.set(enabled: !LoginItem.isEnabled) } catch { LoginItem.openSystemSettings() }
-    }
-
-    @objc func installCommandLineTool() {
-        guard let commandLineTool else { return }
-        let path = (commandLineTool.link.path as NSString).abbreviatingWithTildeInPath
-        let replacing = commandLineTool.state == .foreign
-        if replacing {
-            guard alert("Replace \(path)?", "It already exists and doesn't point at this copy of Headroom.", buttons: ["Replace", "Cancel"]) == .alertFirstButtonReturn else { return }
+    @objc func openSettings() {
+        if settingsWindow == nil {
+            let window = SettingsWindow(contentViewController: NSHostingController(rootView: SettingsView(model: settings)))
+            window.title = "Headroom Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
         }
-        do {
-            try commandLineTool.install(replacing: replacing)
-            let folder = (commandLineTool.link.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
-            alert("Installed the headroom command", "It is linked at \(path). If your shell can't find it, add \(folder) to your PATH.")
-        } catch {
-            alert("Couldn't install the command line tool", error.localizedDescription)
-        }
-    }
-
-    @objc func uninstallCommandLineTool() {
-        do { try commandLineTool?.uninstall() } catch {
-            alert("Couldn't uninstall the command line tool", error.localizedDescription)
-        }
-    }
-
-    /// A menu bar app has no window to hang this on, so it comes forward first.
-    @discardableResult
-    private func alert(_ message: String, _ detail: String, buttons: [String] = []) -> NSApplication.ModalResponse {
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.informativeText = detail
-        buttons.forEach { alert.addButton(withTitle: $0) }
+        // It doesn't follow changes while closed.
+        settings.objectWillChange.send()
         NSApp.activate(ignoringOtherApps: true)
-        return alert.runModal()
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc func restartToUpdate() {
@@ -281,7 +217,7 @@ if arguments.contains("--print") {
     // Diagnostic: one fetch per provider, no cache, no UI.
     let done = DispatchSemaphore(value: 0)
     Task.detached {
-        for provider in allProviders {
+        for provider in appProviders {
             switch await provider.fetch() {
             case .success(let snapshot):
                 print("\(provider.name)\(snapshot.plan.map { " (\($0))" } ?? "")")
@@ -303,7 +239,7 @@ MainActor.assumeIsolated {
 
     if let index = arguments.firstIndex(of: "--render"), let path = arguments.dropFirst(index + 1).first {
         // Diagnostic: draw the icon and menu rows from cached state to a PNG.
-        let engine = Engine(providers: allProviders, cacheFile: cacheFile)
+        let engine = Engine(providers: appProviders, cacheFile: cacheFile)
         do {
             try Render.png(engine: engine, to: URL(fileURLWithPath: path), dark: arguments.contains("--dark"), updateReady: arguments.contains("--update-ready"))
             exit(0)
@@ -320,7 +256,7 @@ MainActor.assumeIsolated {
     }
 
     let app = NSApplication.shared
-    let delegate = AppDelegate(engine: Engine(providers: allProviders, cacheFile: cacheFile))
+    let delegate = AppDelegate(engine: Engine(providers: appProviders, cacheFile: cacheFile))
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
     withExtendedLifetime(delegate) { app.run() }

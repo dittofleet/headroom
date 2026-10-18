@@ -4,6 +4,7 @@ import HeadroomCore
 // Claude Code's own OAuth token. Once it has expired we renew it the way
 // Claude Code would, and store the result back where Claude Code keeps it,
 // so the two keep sharing one session instead of logging each other out.
+// In Passive mode it is only ever read.
 
 extension ClaudeProvider {
     static let signInAdvice = "sign in again with `claude login`"
@@ -153,6 +154,14 @@ actor TokenRenewer {
 
     func renew(_ creds: ClaudeProvider.Credentials) async -> Result<ClaudeProvider.Credentials, FetchFailure> {
         let signedOut = FetchFailure("Session expired, \(ClaudeProvider.signInAdvice)")
+        let rejected = FetchFailure("Token rejected, \(ClaudeProvider.signInAdvice)")
+        let leftToClaudeCode = FetchFailure("Token expired, refreshes when Claude Code next runs")
+        // Passive mode only reads, which still picks up Claude Code's own
+        // renewal.
+        if LoginPreferences.passiveMode {
+            if let current = await Self.renewedSince(creds) { return .success(current) }
+            return .failure(creds.isLive(at: Date()) ? rejected : leftToClaudeCode)
+        }
         guard let refreshToken = creds.refreshToken, !dead.contains(refreshToken) else {
             return .failure(signedOut)
         }
@@ -161,22 +170,23 @@ actor TokenRenewer {
         // renewal produced would not help, and would rotate the refresh
         // token on every poll.
         if creds.isLive(at: Date()), creds.token == lastIssued {
-            return .failure(FetchFailure("Token rejected, \(ClaudeProvider.signInAdvice)"))
+            return .failure(rejected)
         }
         // The unscoped keychain lookup is only for reading an older entry.
         // A renewal could not be written back to it as the same item.
         if case .keychain(account: nil) = creds.source {
-            return .failure(FetchFailure("Token expired, refreshes when Claude Code next runs"))
+            return .failure(leftToClaudeCode)
         }
         guard DirectoryLock.take(Self.lock) else {
             return .failure(FetchFailure("Token expired, Claude Code is renewing it"))
         }
         defer { DirectoryLock.release(Self.lock) }
 
-        // Claude Code may have renewed since we read, in which case the
-        // stored token is already a different, live one.
-        if let current = await ClaudeProvider.read(creds.source), current.token != creds.token, current.isLive(at: Date()) {
-            return .success(current)
+        if let current = await Self.renewedSince(creds) { return .success(current) }
+        // Switched on while this waited. Past here the refresh token is spent,
+        // and only the write keeps Claude Code signed in.
+        if LoginPreferences.passiveMode {
+            return .failure(leftToClaudeCode)
         }
 
         var body: [String: Any] = ["grant_type": "refresh_token", "refresh_token": refreshToken, "client_id": Self.client.clientID]
@@ -207,6 +217,13 @@ actor TokenRenewer {
         }
         lastIssued = renewed.token
         return .success(renewed)
+    }
+
+    /// Claude Code may have renewed since we read, in which case the stored
+    /// token is already a different, live one.
+    private static func renewedSince(_ creds: ClaudeProvider.Credentials) async -> ClaudeProvider.Credentials? {
+        guard let current = await ClaudeProvider.read(creds.source), current.token != creds.token, current.isLive(at: Date()) else { return nil }
+        return current
     }
 
     private static func store(_ document: Data, to source: ClaudeProvider.Credentials.Source) async -> Bool {

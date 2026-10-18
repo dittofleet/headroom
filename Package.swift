@@ -17,11 +17,11 @@ let package = Package(
         // updating the app, and the `headroom` command's link.
         .target(name: "HeadroomMac", dependencies: ["HeadroomCore"]),
         // Sessions of our own, signed in from the app, for where there is no
-        // CLI to borrow one from: the phone.
+        // CLI to borrow one from (the phone), or on the Mac when asked to.
         .target(name: "HeadroomAccounts", dependencies: ["HeadroomCore"]),
 
         // The menu bar app.
-        .executableTarget(name: "Headroom", dependencies: ["HeadroomCore", "HeadroomMac"]),
+        .executableTarget(name: "Headroom", dependencies: ["HeadroomCore", "HeadroomMac", "HeadroomAccounts"]),
         // Not "headroom": it would collide with "Headroom" on a
         // case-insensitive disk, both in .build and in the app bundle.
         .executableTarget(name: "headroom-cli", dependencies: ["HeadroomCore", "HeadroomMac"]),

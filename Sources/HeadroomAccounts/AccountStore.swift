@@ -2,10 +2,11 @@ import Foundation
 import HeadroomCore
 import Security
 
-// Sessions of our own, for where there is no CLI to borrow one from: the
-// phone. Sign-in goes through the same OAuth client and loopback redirect
-// the CLI's own login uses, so the result is a separate session. Renewing
-// it never signs the CLI out, and the other way around.
+// Sessions of our own, for where there is no CLI to borrow one from (the
+// phone), or the CLI's is better left alone (the Mac). Sign-in goes
+// through the same OAuth client and loopback redirect the CLI's own login
+// uses, so the result is a separate session. Renewing it never signs the
+// CLI out, and the other way around.
 
 /// A signed-in session with one provider.
 public struct AccountTokens: Codable, Equatable, Sendable {
@@ -18,14 +19,18 @@ public struct AccountTokens: Codable, Equatable, Sendable {
     /// Claude's plan as of sign-in, for when the profile can't be asked.
     /// Codex's comes with its usage instead.
     public var plan: String?
+    /// Who signed in, to show. Also stored as the item's comment, which can
+    /// be read without the tokens.
+    public var email: String?
 
-    public init(accessToken: String, refreshToken: String? = nil, expiresAt: Date?, scopes: [String], accountID: String? = nil, plan: String? = nil) {
+    public init(accessToken: String, refreshToken: String? = nil, expiresAt: Date?, scopes: [String], accountID: String? = nil, plan: String? = nil, email: String? = nil) {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
         self.scopes = scopes
         self.accountID = accountID
         self.plan = plan
+        self.email = email
     }
 
     /// A minute early, so a token doesn't run out between here and the server.
@@ -34,8 +39,10 @@ public struct AccountTokens: Codable, Equatable, Sendable {
     }
 }
 
-/// Tokens in the keychain, one item per provider, readable while the phone
-/// is locked so lock screen widgets can still refresh.
+/// Tokens in the keychain, one item per provider. On the phone, readable
+/// while it is locked so lock screen widgets can still refresh. On the Mac,
+/// in the login keychain: the data protection one needs entitlements a
+/// local build doesn't have.
 public struct AccountStore: Sendable {
     private static let service = "io.github.dittofleet.headroom.account"
 
@@ -56,8 +63,10 @@ public struct AccountStore: Sendable {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
             kSecAttrAccount as String: id,
-            kSecUseDataProtectionKeychain as String: true,
         ]
+        #if os(iOS)
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
         if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
         return query
     }
@@ -74,6 +83,16 @@ public struct AccountStore: Sendable {
     /// Whether there are tokens at all, without reading them.
     public func contains(_ id: String) -> Bool {
         SecItemCopyMatching(query(id) as CFDictionary, nil) == errSecSuccess
+    }
+
+    /// Who signed in, without reading the tokens: on the Mac, that can ask
+    /// for the keychain password.
+    public func email(_ id: String) -> String? {
+        var query = query(id)
+        query[kSecReturnAttributes as String] = true
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+        return (result as? [String: Any])?[kSecAttrComment as String] as? String
     }
 
     /// Stores a sign-in's tokens, replacing any there were.
@@ -96,14 +115,19 @@ public struct AccountStore: Sendable {
 
     private static func attributes(_ tokens: AccountTokens) -> [String: Any]? {
         guard let data = try? JSONEncoder().encode(tokens) else { return nil }
-        return [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
+        var attributes: [String: Any] = [kSecValueData as String: data]
+        // Not the label: the Mac's login keychain fills that in.
+        if let email = tokens.email { attributes[kSecAttrComment as String] = email }
+        #if os(iOS)
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        #endif
+        return attributes
     }
 
-    public func remove(_ id: String) {
-        SecItemDelete(query(id) as CFDictionary)
+    /// Whether the tokens are gone, including when there were none.
+    @discardableResult
+    public func remove(_ id: String) -> Bool {
+        [errSecSuccess, errSecItemNotFound].contains(SecItemDelete(query(id) as CFDictionary))
     }
 
     /// Runs `body` holding this provider's renewal lock, across processes.

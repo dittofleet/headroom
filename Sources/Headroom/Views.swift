@@ -178,11 +178,7 @@ enum Preferences {
 enum MenuEntry {
     case view(NSView)
     case info(String, toolTip: String? = nil)
-    case action(title: String, selector: Selector, key: String = "", checked: Bool = false, tag: Int = 0)
-    case submenu(title: String, entries: [MenuEntry])
-    /// The system divider, for submenus. They have no custom rows to line
-    /// up with, and a SeparatorView would stretch them to the menu's width.
-    case separator
+    case action(title: String, selector: Selector, key: String = "", tag: Int = 0)
 }
 
 /// The parts of the menu that don't come from the engine.
@@ -191,9 +187,6 @@ struct MenuChrome {
     var aboutDetail: String?
     var updateReady: Bool
     var canUpdate: Bool
-    var startAtLogin: Bool
-    /// Nil when this build has no CLI next to it to link.
-    var commandLineTool: CLILink.State?
     var showPace: Bool
     var showNumbers: Bool
     var menuBarLimits: [String: String]
@@ -209,7 +202,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     for (index, provider) in engine.providers.enumerated() {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
-    entries.append(.submenu(title: "Settings", entries: settingsEntries(engine: engine, chrome: chrome, now: now)))
+    entries.append(.action(title: "Settings…", selector: #selector(AppDelegate.openSettings), key: ","))
     entries.append(.view(SeparatorView()))
     entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
     if chrome.updateReady {
@@ -218,47 +211,6 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
         entries.append(.action(title: "Check for Updates", selector: #selector(AppDelegate.checkForUpdates)))
     }
     entries.append(.action(title: "Quit Headroom", selector: #selector(AppDelegate.quit), key: "q"))
-    return entries
-}
-
-@MainActor
-func settingsEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
-    var entries = menuBarChoices(engine: engine, chrome: chrome, now: now)
-    if !entries.isEmpty { entries.append(.separator) }
-    entries.append(.action(title: "Show Numbers in Menu Bar", selector: #selector(AppDelegate.toggleShowNumbers), checked: chrome.showNumbers))
-    entries.append(.action(title: "Show Pace Marker", selector: #selector(AppDelegate.toggleShowPace), checked: chrome.showPace))
-    entries.append(.action(title: "Start at Login", selector: #selector(AppDelegate.toggleStartAtLogin), checked: chrome.startAtLogin))
-    if chrome.commandLineTool != nil { entries.append(.separator) }
-    switch chrome.commandLineTool {
-    case nil: break
-    case .installed:
-        entries.append(.action(title: "Uninstall Command Line Tool", selector: #selector(AppDelegate.uninstallCommandLineTool)))
-    case .stale:
-        entries.append(.action(title: "Repair Command Line Tool", selector: #selector(AppDelegate.installCommandLineTool)))
-    case .missing, .foreign:
-        entries.append(.action(title: "Install Command Line Tool", selector: #selector(AppDelegate.installCommandLineTool)))
-    }
-    return entries
-}
-
-/// The limits each provider could show in the menu bar, plus Stacked when
-/// there is something to stack, under a heading per provider, with a check
-/// on the one showing now.
-@MainActor
-func menuBarChoices(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
-    var entries: [MenuEntry] = []
-    for (index, provider) in engine.providers.enumerated() {
-        guard let snapshot = engine.state(provider).snapshot else { continue }
-        let choice = chrome.menuBarLimits[provider.id]
-        let shown = snapshot.shownChoice(choice, at: now)
-        entries.append(.info("\(provider.name) in Menu Bar"))
-        entries += snapshot.limits.map { limit in
-            .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit.label == shown, tag: index)
-        }
-        if snapshot.stackedWeekly(at: now) != nil {
-            entries.append(.action(title: stackedChoice, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: shown == stackedChoice, tag: index))
-        }
-    }
     return entries
 }
 

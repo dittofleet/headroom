@@ -46,20 +46,21 @@ private func jwt(_ claims: [String: Any]) -> String {
     #expect(attempt.code(fromRequestTarget: "/favicon.ico") == nil)
     let good = try #require(attempt.code(fromRequestTarget: "/callback?code=abc&state=\(state)"))
     #expect(try good.get() == "abc")
-    let forged = try #require(attempt.code(fromRequestTarget: "/callback?code=abc&state=other"))
-    #expect(throws: FetchFailure.self) { try forged.get() }
+    // Another attempt's redirect is ignored rather than ending this one.
+    #expect(attempt.code(fromRequestTarget: "/callback?code=abc&state=other") == nil)
     let denied = try #require(attempt.code(fromRequestTarget: "/callback?error=access_denied&state=\(state)"))
     #expect(throws: FetchFailure.self) { try denied.get() }
 }
 
 @Test func codexTokensComeFromTheJWTs() async throws {
     let access = jwt(["exp": 1_790_000_000])
-    let id = jwt(["https://api.openai.com/auth": ["chatgpt_account_id": "acct"]])
+    let id = jwt(["https://api.openai.com/auth": ["chatgpt_account_id": "acct"], "email": "me@example.com"])
     let body = try JSONSerialization.data(withJSONObject: ["access_token": access, "id_token": id, "refresh_token": "r1"])
     let tokens = try #require(OAuthClient.codex.tokens(from: body, replacing: nil, now: Date()))
     #expect(tokens.accessToken == access)
     #expect(tokens.refreshToken == "r1")
     #expect(tokens.accountID == "acct")
+    #expect(tokens.email == "me@example.com")
     #expect(tokens.expiresAt == Date(timeIntervalSince1970: 1_790_000_000))
 
     // A renewal without a new refresh token or account keeps the old ones.
@@ -67,7 +68,19 @@ private func jwt(_ claims: [String: Any]) -> String {
     let renewed = try #require(OAuthClient.codex.tokens(from: renewal, replacing: tokens, now: Date()))
     #expect(renewed.refreshToken == "r1")
     #expect(renewed.accountID == "acct")
+    #expect(renewed.email == "me@example.com")
     #expect(renewed.expiresAt == Date(timeIntervalSince1970: 1_790_100_000))
+}
+
+@Test func claudeTokensKeepTheAccountEmail() throws {
+    let body = Data(#"{"access_token": "a1", "refresh_token": "r1", "expires_in": 3600, "scope": "user:profile", "account": {"email_address": "me@example.com"}}"#.utf8)
+    let tokens = try #require(OAuthClient.claude.tokens(from: body, replacing: nil, now: Date()))
+    #expect(tokens.email == "me@example.com")
+
+    // A renewal without the account keeps the old email.
+    let renewal = Data(#"{"access_token": "a2", "expires_in": 3600}"#.utf8)
+    let renewed = try #require(OAuthClient.claude.tokens(from: renewal, replacing: tokens, now: Date()))
+    #expect(renewed.email == "me@example.com" && renewed.refreshToken == "r1")
 }
 
 @Test func tokensRenewAMinuteEarly() {

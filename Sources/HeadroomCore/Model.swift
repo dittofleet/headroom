@@ -79,6 +79,12 @@ public struct Snapshot: Codable, Equatable, Sendable {
         return limits.filter { $0.kind == .weekly && $0 != front }.max { $0.percent(at: now) < $1.percent(at: now) }
     }
 
+    /// What a provider could lead with: each limit, plus `stackedChoice`
+    /// when there is something to stack.
+    public func choices(at now: Date) -> [String] {
+        limits.map(\.label) + (stackedWeekly(at: now) == nil ? [] : [stackedChoice])
+    }
+
     /// What a stored choice shows as: `stackedChoice`, or the label of the
     /// limit leading. A Stacked choice with nothing left to stack shows the
     /// plain session.
