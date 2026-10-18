@@ -42,7 +42,7 @@ extension LoopbackSignIn {
     static func browser() -> LoopbackSignIn {
         LoopbackSignIn { result in
             let message = if case .success = result { "You can close this tab and go back to Headroom." } else { "Headroom couldn't log in. You can close this tab." }
-            let page = "<!doctype html><meta charset=utf-8><title>Headroom</title><body style=\"font: 15px -apple-system; text-align: center; margin-top: 20vh\">\(message)"
+            let page = "<!doctype html><meta charset=utf-8><meta name=color-scheme content=\"light dark\"><title>Headroom</title><body style=\"font: 15px system-ui; text-align: center; margin-top: 20vh\">\(message)"
             return "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(page.utf8.count)\r\nConnection: close\r\n\r\n\(page)"
         }
     }
