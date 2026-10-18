@@ -29,10 +29,10 @@ struct UsageEntry: TimelineEntry {
         row.snapshot?.headline(at: date, preferring: settings.limits[row.id])
     }
 
-    /// The weekly limits laid over the headline, when Stacked is chosen.
-    func stacked(_ row: Row) -> [Limit] {
-        guard settings.limits[row.id] == stackedChoice else { return [] }
-        return row.snapshot?.stackedOverHeadline(at: date) ?? []
+    /// The weekly limit under the headline, when Stacked is chosen.
+    func stackedWeekly(_ row: Row) -> Limit? {
+        guard settings.limits[row.id] == stackedChoice else { return nil }
+        return row.snapshot?.stackedWeekly(at: date)
     }
 
     /// Every limit, the headline first.
@@ -133,21 +133,28 @@ struct UsageView: View {
     }
 
     /// The Mac menu bar icon: per provider a letter, the bar of the limit
-    /// it leads with (Stacked lays the weekly limits over it),
+    /// it leads with (Stacked adds a weekly limit under it),
     /// and the number unless numbers are off.
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(entry.rows, id: \.id) { row in
                 let headline = entry.headline(row)
-                let stacked = entry.stacked(row)
+                let weekly = entry.stackedWeekly(row)
                 HStack(spacing: 6) {
                     Text(row.glyph).font(.caption.weight(.bold)).frame(width: 12)
-                    UsageBar(
-                        percent: headline?.percent(at: entry.date) ?? 0,
-                        pace: entry.settings.showPace ? headline?.elapsedFraction(at: entry.date) : nil,
-                        overlay: stacked.map { $0.percent(at: entry.date) },
-                        tint: .primary
-                    )
+                    // Stacked: the session, and the weekly limit in a
+                    // thinner lane under it, like the Mac menu bar.
+                    VStack(spacing: 1) {
+                        UsageBar(
+                            percent: headline?.percent(at: entry.date) ?? 0,
+                            pace: entry.settings.showPace ? headline?.elapsedFraction(at: entry.date) : nil,
+                            tint: .primary,
+                            height: weekly == nil ? 5 : 3.5
+                        )
+                        if let weekly {
+                            UsageBar(percent: weekly.percent(at: entry.date), tint: .primary, height: 2.5)
+                        }
+                    }
                     .widgetAccentable()
                     if entry.settings.showNumbers {
                         Text(headline.map { Format.percent($0.percent(at: entry.date)) } ?? "–")

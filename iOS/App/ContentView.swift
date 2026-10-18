@@ -49,7 +49,7 @@ struct ContentView: View {
                 if model.isSignedIn(provider), let snapshot = model.engine.state(provider).snapshot {
                     Picker(provider.name, selection: leadingLimit(provider, snapshot: snapshot, now: now)) {
                         ForEach(snapshot.limits.map(\.label), id: \.self) { Text($0) }
-                        if !snapshot.stackedOverHeadline(at: now).isEmpty {
+                        if snapshot.stackedWeekly(at: now) != nil {
                             Text(stackedChoice).tag(stackedChoice)
                         }
                     }
@@ -60,7 +60,7 @@ struct ContentView: View {
         } header: {
             Text("Widgets")
         } footer: {
-            Text("Each service's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and lays the weekly limits over it.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
+            Text("Each service's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the fullest weekly limit under it.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
         }
     }
 

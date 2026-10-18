@@ -72,24 +72,24 @@ public struct Snapshot: Codable, Equatable, Sendable {
             ?? limits.max { $0.percent(at: now) < $1.percent(at: now) }
     }
 
-    /// The weekly limits a stacked menu bar row lays over its headline:
-    /// every one but the headline itself.
-    public func stackedOverHeadline(at now: Date) -> [Limit] {
+    /// The weekly limit a stacked menu bar row shows under its headline:
+    /// the fullest one other than the headline itself.
+    public func stackedWeekly(at now: Date) -> Limit? {
         let front = headline(at: now)
-        return limits.filter { $0.kind == .weekly && $0 != front }
+        return limits.filter { $0.kind == .weekly && $0 != front }.max { $0.percent(at: now) < $1.percent(at: now) }
     }
 
     /// What a stored choice shows as: `stackedChoice`, or the label of the
     /// limit leading. A Stacked choice with nothing left to stack shows the
     /// plain session.
     public func shownChoice(_ choice: String?, at now: Date) -> String? {
-        if choice == stackedChoice, !stackedOverHeadline(at: now).isEmpty { return stackedChoice }
+        if choice == stackedChoice, stackedWeekly(at: now) != nil { return stackedChoice }
         return headline(at: now, preferring: choice)?.label
     }
 }
 
-/// The choice of what a provider leads with that shows the session with the
-/// weekly limits over it, rather than a single limit. Stored in place of
+/// The choice of what a provider leads with that shows the session with its
+/// fullest weekly limit under it, rather than a single limit. Stored in place of
 /// a limit's label, on the Mac for the menu bar and on iOS for the widgets.
 public let stackedChoice = "Stacked"
 

@@ -22,13 +22,12 @@ enum StatusIcon {
         /// no data at all.
         var label: String?
         var percent: Double?
-        /// Weekly limits laid over the bar, one horizontal strip each: the
-        /// general one on top, model-scoped ones below.
-        var overlay: [Strip] = []
+        /// A weekly limit in its own lane under the bar, when Stacked.
+        var weekly: Lane?
         var stale: Bool
     }
 
-    struct Strip: Equatable {
+    struct Lane: Equatable {
         var label: String
         var percent: Double
     }
@@ -48,13 +47,12 @@ enum StatusIcon {
             let snapshot = engine.state(provider).snapshot
             let choice = chrome.menuBarLimits[provider.id]
             let headline = snapshot?.headline(at: now, preferring: choice)
-            var stacked: [Limit] = []
-            if choice == stackedChoice, let snapshot { stacked = snapshot.stackedOverHeadline(at: now) }
+            let weekly = choice == stackedChoice ? snapshot?.stackedWeekly(at: now) : nil
             return Row(
                 glyph: provider.glyph,
                 label: headline?.label,
                 percent: headline?.percent(at: now),
-                overlay: stacked.map { Strip(label: $0.label, percent: $0.percent(at: now)) },
+                weekly: weekly.map { Lane(label: $0.label, percent: $0.percent(at: now)) },
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
@@ -75,17 +73,13 @@ enum StatusIcon {
         let numberWidth: CGFloat = spec.numbers ? gap + ceil(textSizes.map(\.width).max() ?? 0) : 0
         let size = NSSize(width: glyphWidth + barWidth + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
-        let overlayLevels = rows.flatMap(\.overlay).map { Level(percent: $0.percent) }
+        let weeklyLevels = rows.compactMap(\.weekly).map { Level(percent: $0.percent) }
         func isDark(_ appearance: NSAppearance) -> Bool {
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         }
         // What the system would tint the icon, for when it can't. The drawing
         // handler runs again whenever the menu bar turns light or dark.
         let plain = NSColor(name: nil) { isDark($0) ? .white : .black }
-        // The track, a weekly limit over the session, a weekly limit past
-        // it (two thirds over the track), and the session alone land a
-        // quarter apart, so every edge between them reads.
-        let trackAlpha: CGFloat = 0.25, weeklyAlpha: CGFloat = 2 / 3, overlapAlpha: CGFloat = 0.5
         // A warning stays close to the plain ink, with only a hint of its hue.
         func ink(_ level: Level) -> NSColor {
             guard let warning = level.color else { return plain }
@@ -109,29 +103,17 @@ enum StatusIcon {
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
-                drawTrack(track, color: color.withAlphaComponent(trackAlpha * alpha))
-                let fill = fillWidth(track, percent: row.percent ?? 0, minFill: 2)
-                // Each weekly limit fills its own horizontal strip of the
-                // bar, over the session so a full session can't hide it:
-                // past the session it is drawn over the track, and over the
-                // session it lightens the fill.
-                let stripHeight = track.height / CGFloat(max(row.overlay.count, 1))
-                let bands = row.overlay.enumerated().map { position, strip in
-                    (strip, NSRect(x: track.minX, y: track.maxY - stripHeight * CGFloat(position + 1), width: fillWidth(track, percent: strip.percent, minFill: 2), height: stripHeight))
+                func drawLane(_ lane: NSRect, percent: Double, color: NSColor) {
+                    drawBar(lane, percent: percent, trackColor: color.withAlphaComponent(0.25 * alpha), fillColor: color.withAlphaComponent(alpha), minFill: 2)
                 }
-                for (strip, band) in bands {
-                    NSGraphicsContext.saveGraphicsState()
-                    band.clip()
-                    drawFill(track, width: band.width, color: ink(Level(percent: strip.percent)).withAlphaComponent(weeklyAlpha * alpha))
-                    NSGraphicsContext.restoreGraphicsState()
-                }
-                drawFill(track, width: fill, color: color.withAlphaComponent(alpha))
-                for (_, band) in bands {
-                    NSGraphicsContext.saveGraphicsState()
-                    band.clip()
-                    NSGraphicsContext.current?.compositingOperation = .destinationOut
-                    drawFill(track, width: fill, color: .black.withAlphaComponent(1 - overlapAlpha))
-                    NSGraphicsContext.restoreGraphicsState()
+                if let weekly = row.weekly {
+                    // Stacked: the session on the top half, the weekly
+                    // limit in a thinner lane below.
+                    let sessionHeight = track.height / 2
+                    drawLane(NSRect(x: track.minX, y: track.maxY - sessionHeight, width: track.width, height: sessionHeight), percent: row.percent ?? 0, color: color)
+                    drawLane(NSRect(x: track.minX, y: track.minY, width: track.width, height: sessionHeight - 1), percent: weekly.percent, color: ink(Level(percent: weekly.percent)))
+                } else {
+                    drawLane(track, percent: row.percent ?? 0, color: color)
                 }
 
                 if spec.numbers {
@@ -146,29 +128,22 @@ enum StatusIcon {
         }
         // A template image follows the menu bar's light/dark tint exactly;
         // give that up only when there is a warning color to show.
-        image.isTemplate = (levels + overlayLevels).allSatisfy { $0 == .normal }
+        image.isTemplate = (levels + weeklyLevels).allSatisfy { $0 == .normal }
         return image
     }
 }
 
-/// A bar's rounded track.
-private func drawTrack(_ track: NSRect, color: NSColor) {
-    color.setFill()
-    NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
-}
-
-/// How far a bar's fill reaches, never shrinking below a visible nub.
-private func fillWidth(_ track: NSRect, percent: Double, minFill: CGFloat? = nil) -> CGFloat {
-    percent > 0 ? max(track.width * percent / 100, minFill ?? track.height) : 0
-}
-
-/// A bar's fill over its track.
-private func drawFill(_ track: NSRect, width: CGFloat, color: NSColor) {
-    guard width > 0 else { return }
+/// A rounded track and its fill, which never shrinks below a visible nub
+/// once anything is used.
+private func drawBar(_ track: NSRect, percent: Double, trackColor: NSColor, fillColor: NSColor, minFill: CGFloat? = nil) {
+    let radius = track.height / 2
+    trackColor.setFill()
+    NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
+    guard percent > 0 else { return }
     var fill = track
-    fill.size.width = width
-    color.setFill()
-    NSBezierPath(roundedRect: fill, xRadius: track.height / 2, yRadius: track.height / 2).fill()
+    fill.size.width = max(track.width * percent / 100, minFill ?? track.height)
+    fillColor.setFill()
+    NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
 }
 
 enum Preferences {
@@ -280,7 +255,7 @@ func menuBarChoices(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry
         entries += snapshot.limits.map { limit in
             .action(title: limit.label, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: limit.label == shown, tag: index)
         }
-        if !snapshot.stackedOverHeadline(at: now).isEmpty {
+        if snapshot.stackedWeekly(at: now) != nil {
             entries.append(.action(title: stackedChoice, selector: #selector(AppDelegate.chooseMenuBarLimit(_:)), checked: shown == stackedChoice, tag: index))
         }
     }
@@ -437,8 +412,7 @@ final class LimitRowView: NSView, Ticking {
         value.draw(at: NSPoint(x: bounds.width - inset - value.size().width, y: 26))
 
         let track = NSRect(x: inset, y: 18, width: bounds.width - inset * 2, height: 5)
-        drawTrack(track, color: NSColor.labelColor.withAlphaComponent(0.12))
-        drawFill(track, width: fillWidth(track, percent: percent), color: accent.withAlphaComponent(stale ? 0.5 : 1))
+        drawBar(track, percent: percent, trackColor: NSColor.labelColor.withAlphaComponent(0.12), fillColor: accent.withAlphaComponent(stale ? 0.5 : 1))
         // Pace tick: how far through the window we are. Fill past the tick
         // means usage is running ahead of the clock.
         if showPace, let elapsed = limit.elapsedFraction(at: now) {
