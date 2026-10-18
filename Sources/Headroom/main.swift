@@ -80,11 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if menuIsOpen { openSubmenus == 0 ? buildMenu(now: now) : (menuIsBehind = true) }
     }
 
-    /// Reads out what the icon shows, stacked weekly limits included.
+    /// Reads out what the icon shows, a stacked weekly limit included.
     private func accessibilitySummary(_ spec: StatusIcon.Spec) -> String {
         zip(engine.providers, spec.rows).map { provider, row in
             let front = [provider.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
-            return ([front] + row.overlay.map { "\($0.label) \(Format.percent($0.percent))" }).joined(separator: ", ")
+            let weekly = row.weekly.map { "\($0.label) \(Format.percent($0.percent))" }
+            return [front, weekly].compactMap { $0 }.joined(separator: ", ")
         }.joined(separator: ". ")
     }
 

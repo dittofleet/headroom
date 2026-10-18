@@ -139,17 +139,21 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(noSession.headline(at: now, preferring: "Opus Weekly") == scoped)
 }
 
-@Test func stackedOverHeadlineIsTheOtherWeeklies() {
+@Test func stackedWeeklyIsTheFullestOtherWeekly() {
     let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
     let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
     let scoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
     let all = Snapshot(limits: [session, weekly, scoped], plan: nil, fetchedAt: now)
-    #expect(all.stackedOverHeadline(at: now) == [weekly, scoped])
+    #expect(all.stackedWeekly(at: now) == scoped)
+    // The fullest wins, wherever it is listed.
+    let generalFuller = Limit(kind: .weekly, label: "Weekly", percent: 90, resetsAt: nil, windowSeconds: nil)
+    let calmScoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 10, resetsAt: nil, windowSeconds: nil)
+    #expect(Snapshot(limits: [session, generalFuller, calmScoped], plan: nil, fetchedAt: now).stackedWeekly(at: now) == generalFuller)
     // Without a session the fullest weekly leads rather than stacking.
     let noSession = Snapshot(limits: [weekly, scoped], plan: nil, fetchedAt: now)
-    #expect(noSession.stackedOverHeadline(at: now) == [weekly])
+    #expect(noSession.stackedWeekly(at: now) == weekly)
     let sessionOnly = Snapshot(limits: [session], plan: nil, fetchedAt: now)
-    #expect(sessionOnly.stackedOverHeadline(at: now) == [])
+    #expect(sessionOnly.stackedWeekly(at: now) == nil)
 }
 
 @Test func formatting() {
