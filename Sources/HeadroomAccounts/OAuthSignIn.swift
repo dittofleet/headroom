@@ -73,7 +73,7 @@ public struct OAuthSignIn: Sendable {
                 return .failure(FetchFailure("Sign-in failed, unrecognized response"))
             }
             if client.flavor == .claude {
-                tokens.plan = await PlanLookup.shared.plan(token: tokens.accessToken, scopes: tokens.scopes)
+                tokens.plan = await PlanLookup.ask(token: tokens.accessToken)
             }
             return .success(tokens)
         case .failure(let failure):

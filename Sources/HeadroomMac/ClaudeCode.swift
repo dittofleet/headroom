@@ -122,7 +122,7 @@ extension ClaudeProvider: Provider {
             Self.parse(data, now: Date()).map(Result.success) ?? .failure(FetchFailure("Unrecognized response"))
         }
         guard case .success(var snapshot) = parsed else { return parsed }
-        snapshot.plan = await PlanLookup.shared.plan(token: creds.token, scopes: creds.scopes) ?? creds.plan
+        snapshot.plan = await PlanLookup.shared.plan(for: id, token: creds.token, scopes: creds.scopes) ?? creds.plan
         return .success(snapshot)
     }
 

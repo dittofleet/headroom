@@ -39,7 +39,8 @@ public struct AccountTokens: Codable, Equatable, Sendable {
     }
 }
 
-/// Tokens in the keychain, one item per provider. On the phone, readable
+/// Tokens in the keychain, one item per account: on the Mac one per
+/// provider, keyed by its id. On the phone, readable
 /// while it is locked so lock screen widgets can still refresh. On the Mac,
 /// in the login keychain: the data protection one needs entitlements a
 /// local build doesn't have.
@@ -58,12 +59,13 @@ public struct AccountStore: Sendable {
         self.lockDirectory = lockDirectory
     }
 
-    private func query(_ id: String) -> [String: Any] {
+    /// Every item when `id` is nil.
+    private func query(_ id: String?) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: id,
         ]
+        if let id { query[kSecAttrAccount as String] = id }
         #if os(iOS)
         query[kSecUseDataProtectionKeychain as String] = true
         #endif
@@ -83,6 +85,19 @@ public struct AccountStore: Sendable {
     /// Whether there are tokens at all, without reading them.
     public func contains(_ id: String) -> Bool {
         SecItemCopyMatching(query(id) as CFDictionary, nil) == errSecSuccess
+    }
+
+    /// Every id there are tokens for, and who signed in, without reading
+    /// the tokens.
+    public func accounts() -> [(id: String, email: String?)] {
+        var query = query(nil)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitAll
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return [] }
+        return (result as? [[String: Any]] ?? []).compactMap { item in
+            (item[kSecAttrAccount as String] as? String).map { ($0, item[kSecAttrComment as String] as? String) }
+        }
     }
 
     /// Who signed in, without reading the tokens: on the Mac, that can ask
@@ -130,7 +145,7 @@ public struct AccountStore: Sendable {
         [errSecSuccess, errSecItemNotFound].contains(SecItemDelete(query(id) as CFDictionary))
     }
 
-    /// Runs `body` holding this provider's renewal lock, across processes.
+    /// Runs `body` holding this account's renewal lock, across processes.
     /// Waits for one another process holds, up to when it counts as stale.
     func locked<T: Sendable>(_ id: String, _ body: @Sendable () async -> T) async -> T {
         guard let lockDirectory else { return await body() }

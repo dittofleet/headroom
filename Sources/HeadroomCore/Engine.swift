@@ -30,7 +30,10 @@ public final class Engine {
         return try? JSONDecoder().decode([String: ProviderState].self, from: data)
     }
 
-    public let providers: [any Provider]
+    /// Settable, for the phone, whose accounts come and go.
+    public var providers: [any Provider] {
+        didSet { onChange?() }
+    }
     private var states: [String: ProviderState]
     public var onChange: (() -> Void)?
 

@@ -6,13 +6,14 @@ import WidgetKit
 
 /// Ways to try the app without signing in, in debug builds only.
 ///
-/// - `-demo`: the app signed in to both providers, showing `UsageEntry.sample`.
+/// - `-demo`: the app signed in to an account of each service, showing
+///   `UsageEntry.sample()`. `-accounts <n>` makes that up to four.
 /// - `-renderWidgets`: also draws the home and lock screens with every
 ///   widget to PNGs in the app's Documents/Renders, from the sample with
 ///   `-demo` and from live numbers without.
 /// - In a simulator, tokens lent by iOS/scripts/sim-borrow-tokens.swift
 ///   are taken in at launch.
-/// - `-signIn <id>`: starts that provider's sign-in at launch.
+/// - `-signIn <service>`: starts a sign-in to "claude" or "codex" at launch.
 /// - `-showSettings`: scrolls down to the widget settings.
 enum Demo {
     private static let arguments = ProcessInfo.processInfo.arguments
@@ -20,7 +21,12 @@ enum Demo {
     static let isOn = arguments.contains("-demo")
     static let rendersWidgets = arguments.contains("-renderWidgets")
     static let showsSettings = arguments.contains("-showSettings")
-    static let signIn = arguments.firstIndex(of: "-signIn").flatMap { arguments.dropFirst($0 + 1).first }
+    static let signIn = value(after: "-signIn").flatMap(Service.init)
+    static let accounts = value(after: "-accounts").flatMap { Int($0) } ?? 2
+
+    private static func value(after flag: String) -> String? {
+        arguments.firstIndex(of: flag).flatMap { arguments.dropFirst($0 + 1).first }
+    }
 
     private struct SampleProvider: Provider {
         let id: String
@@ -40,10 +46,11 @@ enum Demo {
     @MainActor
     static func model() -> Model? {
         if isOn {
-            let providers = UsageEntry.sample.rows.compactMap { row in
+            let providers = UsageEntry.sample(accounts: accounts).rows.compactMap { row in
                 row.snapshot.map { SampleProvider(id: row.id, name: row.name, glyph: row.glyph, snapshot: $0) }
             }
-            return Model(engine: Engine(providers: providers, cacheFile: nil), hasSession: { _ in true })
+            let emails = ["claude-1": "me@example.com", "claude-2": "me@work.example", "codex-1": "me@example.com", "codex-2": "me@work.example"]
+            return Model(engine: Engine(providers: providers, cacheFile: nil), accounts: { providers.map { ($0, emails[$0.id]) } })
         }
         #if targetEnvironment(simulator)
         let borrowed = takeBorrowedTokens()
@@ -63,18 +70,16 @@ enum Demo {
     @MainActor
     static func run(_ model: Model) async {
         if rendersWidgets { await renderWidgets(model: model) }
-        if let signIn, let provider = model.providers.first(where: { $0.id == signIn }) {
-            await model.signIn(provider)
-        }
+        if let signIn { await model.signIn(signIn) }
     }
 
     // MARK: Borrowed tokens
 
     #if targetEnvironment(simulator)
-    /// Moves tokens the script left in the app group into the keychain.
-    /// They come without refresh tokens, so nothing here can renew the
-    /// Mac's sessions, and the file is deleted once read. Returns the
-    /// providers that got new tokens.
+    /// Moves tokens the script left in the app group into the keychain, as
+    /// each service's first account. They come without refresh tokens, so
+    /// nothing here can renew the Mac's sessions, and the file is deleted
+    /// once read. Returns the accounts that got new tokens.
     static func takeBorrowedTokens() -> Set<String> {
         guard let file = Shared.container?.appendingPathComponent("BorrowedTokens.json"),
               let data = try? Data(contentsOf: file)
@@ -91,7 +96,8 @@ enum Demo {
                 accountID: fields["accountID"] as? String,
                 plan: ClaudeProvider.planName(fields["subscription"] as? String, tier: fields["tier"] as? String)
             )
-            if Shared.store.save(tokens, for: id) { taken.insert(id) }
+            guard let account = Service(rawValue: id)?.id(1) else { continue }
+            if Shared.store.save(tokens, for: account) { taken.insert(account) }
         }
         return taken
     }
@@ -113,7 +119,7 @@ enum Demo {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var entry: UsageEntry
         if isOn {
-            entry = .sample
+            entry = .sample(accounts: accounts)
             entry.rows = entry.rows.map { row in
                 var row = row
                 row.snapshot?.fetchedAt = entry.date.addingTimeInterval(-6 * 60)
@@ -121,26 +127,32 @@ enum Demo {
             }
         } else {
             await model.refresh(manual: false)
-            let rows = model.providers.filter(model.isSignedIn).map { UsageEntry.Row($0, model.engine.state($0)) }
+            let rows = model.providers.map { UsageEntry.Row($0, model.engine.state($0)) }
             entry = UsageEntry(date: Date(), rows: rows, settings: model.settings)
         }
         write(homeScreen(entry, dark: false), to: folder.appendingPathComponent("home-light.png"))
         write(homeScreen(entry, dark: true), to: folder.appendingPathComponent("home-dark.png"))
-        write(lockScreen(entry, caption: caption(entry.settings)), to: folder.appendingPathComponent("lock.png"))
+        write(lockScreen(entry), to: folder.appendingPathComponent("lock.png"))
         if isOn {
             var other = entry
-            other.settings = WidgetSettings(showNumbers: false, limits: ["claude": "Fable Weekly", "codex": "Weekly"])
-            write(lockScreen(other, caption: caption(other.settings)), to: folder.appendingPathComponent("lock-alt.png"))
+            other.settings = WidgetSettings(showNumbers: false, limits: ["claude-1": "Fable Weekly", "codex-1": "Weekly"])
+            write(lockScreen(other), to: folder.appendingPathComponent("lock-alt.png"))
         }
     }
 
+    /// The rings on a lock screen render: the first account as in the app,
+    /// and the last one's weekly limit.
+    private static func rings(_ entry: UsageEntry) -> [(row: UsageEntry.Row, limit: LimitChoice)] {
+        guard let first = entry.rows.first, let last = entry.rows.last else { return [] }
+        return [(first, .asInApp), (last, .weekly)]
+    }
+
     /// What a lock screen render was drawn with.
-    private static func caption(_ settings: WidgetSettings) -> String {
-        let leads = ["claude": "Claude", "codex": "Codex"].sorted { $0.key < $1.key }.map { id, name in
-            "\(name): \(settings.limits[id] ?? "Session")"
-        }
-        return (leads + ["numbers \(settings.showNumbers ? "on" : "off")"]).joined(separator: ", ")
-            + "\nRings: Claude As in App, Codex Weekly"
+    private static func caption(_ entry: UsageEntry) -> String {
+        let leads = entry.rows.map { "\($0.name): \(entry.settings.limits[$0.id] ?? "Session")" }
+        let rings = rings(entry).map { "\($0.row.name) \($0.limit == .asInApp ? "As in App" : "Weekly")" }
+        return (leads + ["numbers \(entry.settings.showNumbers ? "on" : "off")"]).joined(separator: ", ")
+            + "\nRings: " + rings.joined(separator: ", ")
     }
 
     @MainActor
@@ -190,7 +202,7 @@ enum Demo {
 
     /// Lock screen widgets draw in the system's monochrome style, which this
     /// approximates with white on a dark wallpaper.
-    private static func lockScreen(_ entry: UsageEntry, caption: String) -> some View {
+    private static func lockScreen(_ entry: UsageEntry) -> some View {
         VStack(spacing: 4) {
             UsageView(entry: entry, familyOverride: .accessoryInline)
                 .font(.subheadline.weight(.semibold))
@@ -199,13 +211,13 @@ enum Demo {
             HStack(spacing: 12) {
                 UsageView(entry: entry, familyOverride: .accessoryRectangular)
                     .frame(width: rectangular.width, height: rectangular.height)
-                ForEach([("claude", LimitChoice.asInApp), ("codex", .weekly)], id: \.0) { id, limit in
-                    GaugeFace(entry: entry, providerID: id, limit: limit)
+                ForEach(rings(entry), id: \.row.id) { ring in
+                    GaugeFace(entry: entry, accountID: ring.row.id, limit: ring.limit)
                         .frame(width: circular.width, height: circular.height)
                 }
             }
             .padding(.top, 8)
-            Text(caption)
+            Text(caption(entry))
                 .font(.caption2)
                 .multilineTextAlignment(.center)
                 .opacity(0.6)

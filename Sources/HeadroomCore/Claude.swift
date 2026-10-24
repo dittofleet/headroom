@@ -121,8 +121,8 @@ public struct ClaudeProvider: Sendable {
     }
 }
 
-/// Asks for the account's plan when the token changes and otherwise at most
-/// hourly: plans rarely change, and every poll already costs a request.
+/// Asks for each account's plan when its token changes and otherwise at
+/// most hourly: plans rarely change, and every poll already costs a request.
 package actor PlanLookup {
     package static let shared = PlanLookup()
 
@@ -130,29 +130,38 @@ package actor PlanLookup {
     private static let askAgainAfter: TimeInterval = 3600
     private static let retryAfter: TimeInterval = 10 * 60
 
-    /// The last answer. It stands until a newer one arrives, since a new
-    /// token is far more often a renewal than another account.
-    private var plan: String?
-    private var askedWith: String?
-    private var nextAsk = Date.distantPast
-    private var asking = false
+    private struct Asked {
+        /// The last answer. It stands until a newer one arrives, since a new
+        /// token is far more often a renewal than another account.
+        var plan: String?
+        var token: String?
+        var next = Date.distantPast
+        var asking = false
+    }
+
+    /// By the account the tokens are stored as.
+    private var asked: [String: Asked] = [:]
 
     /// Nil until the profile has answered, in which case the stored plan is
     /// the best there is.
-    package func plan(token: String, scopes: [String]) async -> String? {
+    package func plan(for account: String, token: String, scopes: [String]) async -> String? {
         // A token without the profile scope would only be refused.
         guard scopes.isEmpty || scopes.contains("user:profile") else { return nil }
-        guard !asking, token != askedWith || Date() >= nextAsk else { return plan }
-        asking = true
-        defer { asking = false }
-        askedWith = token
-        let response = await HTTP.get(Self.endpoint, headers: ClaudeProvider.oauthHeaders(token: token), authHint: "Token rejected")
-        if case .success(let data) = response, let answer = ClaudeProvider.parseProfile(data) {
-            plan = answer
-            nextAsk = Date().addingTimeInterval(Self.askAgainAfter)
-        } else {
-            nextAsk = Date().addingTimeInterval(Self.retryAfter)
-        }
-        return plan
+        let last = asked[account, default: Asked()]
+        guard !last.asking, token != last.token || Date() >= last.next else { return last.plan }
+        asked[account, default: Asked()].asking = true
+        asked[account]?.token = token
+        let answer = await Self.ask(token: token)
+        asked[account]?.asking = false
+        if let answer { asked[account]?.plan = answer }
+        asked[account]?.next = Date().addingTimeInterval(answer == nil ? Self.retryAfter : Self.askAgainAfter)
+        return asked[account]?.plan
+    }
+
+    /// The plan, asked of the profile right away.
+    package static func ask(token: String) async -> String? {
+        let response = await HTTP.get(endpoint, headers: ClaudeProvider.oauthHeaders(token: token), authHint: "Token rejected")
+        guard case .success(let data) = response else { return nil }
+        return ClaudeProvider.parseProfile(data)
     }
 }

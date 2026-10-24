@@ -14,8 +14,9 @@ final class SignInFlow: NSObject, ASWebAuthenticationPresentationContextProvidin
 
     private var session: ASWebAuthenticationSession?
 
-    /// Nil when the sheet was dismissed before signing in.
-    func run(_ client: OAuthClient) async -> Result<AccountTokens, FetchFailure>? {
+    /// Nil when the sheet was dismissed before signing in. `fresh` leaves
+    /// out Safari's cookies, so the page asks who to sign in as.
+    func run(_ client: OAuthClient, fresh: Bool) async -> Result<AccountTokens, FetchFailure>? {
         defer { session?.cancel() }
         let signIn = LoopbackSignIn { _ in
             "HTTP/1.1 302 Found\r\nLocation: \(Self.callbackScheme)://signed-in\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
@@ -28,9 +29,9 @@ final class SignInFlow: NSObject, ASWebAuthenticationPresentationContextProvidin
                     signIn.finish(error == nil ? .failure(FetchFailure("Sign-in did not return a code")) : nil)
                 }
             }
-            // Shares Safari's cookies, so being signed in there already
-            // leaves only the consent page.
-            session.prefersEphemeralWebBrowserSession = false
+            // Otherwise shares Safari's cookies, so being signed in there
+            // already leaves only the consent page.
+            session.prefersEphemeralWebBrowserSession = fresh
             session.presentationContextProvider = self
             self.session = session
             if !session.start() {

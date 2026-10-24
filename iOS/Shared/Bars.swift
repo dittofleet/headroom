@@ -50,6 +50,8 @@ struct UsageBar: View {
 /// One limit: label, percentage, bar, and optionally the reset time.
 struct LimitRow: View {
     var limit: Limit
+    /// In place of the limit's label.
+    var title: String?
     var now: Date
     var dimmed: Bool
     var showPace: Bool
@@ -62,7 +64,7 @@ struct LimitRow: View {
         let percent = limit.percent(at: now)
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(limit.label).lineLimit(1)
+                Text(title ?? limit.label).lineLimit(1)
                 Spacer(minLength: 4)
                 Text(Format.percent(percent))
                     .fontWeight(.semibold)

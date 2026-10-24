@@ -9,15 +9,20 @@ enum WidgetData {
 
     /// The cached numbers, after fetching whatever is due.
     static func rows(refresh: Bool) async -> [UsageEntry.Row] {
+        engine.providers = Shared.accounts()
         engine.reload()
-        if refresh { await engine.refreshAndWait() }
-        return engine.providers.filter(Shared.isSignedIn).map { UsageEntry.Row($0, engine.state($0)) }
+        if refresh {
+            await engine.refreshAndWait()
+            // A session found dead along the way has been signed out.
+            engine.providers = Shared.accounts()
+        }
+        return engine.providers.map { UsageEntry.Row($0, engine.state($0)) }
     }
 
     /// What a snapshot for the widget gallery shows: the sample until
     /// something is signed in.
     static func entry(rows: [UsageEntry.Row], isPreview: Bool) -> UsageEntry {
-        rows.isEmpty && isPreview ? .sample : UsageEntry(date: Date(), rows: rows, settings: .current)
+        rows.isEmpty && isPreview ? .sample() : UsageEntry(date: Date(), rows: rows, settings: .current)
     }
 
     /// Entries ahead of time: pace ticks move and windows reset without a
