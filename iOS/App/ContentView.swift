@@ -13,8 +13,9 @@ struct ContentView: View {
                 ScrollViewReader { proxy in
                     List {
                         ForEach(model.providers, id: \.id) { provider in
-                            providerSection(provider, now: context.date)
+                            accountSection(provider, now: context.date)
                         }
+                        signInSection
                         widgetSettings(now: context.date)
                             .id("settings")
                     }
@@ -41,12 +42,12 @@ struct ContentView: View {
         }
     }
 
-    /// The Mac's display settings, for the widgets: what each provider
+    /// The Mac's display settings, for the widgets: what each account
     /// leads with, and the two toggles.
     private func widgetSettings(now: Date) -> some View {
         Section {
             ForEach(model.providers, id: \.id) { provider in
-                if model.isSignedIn(provider), let snapshot = model.engine.state(provider).snapshot {
+                if let snapshot = model.engine.state(provider).snapshot {
                     Picker(provider.name, selection: leadingLimit(provider, snapshot: snapshot, now: now)) {
                         ForEach(snapshot.choices(at: now), id: \.self) { Text($0) }
                     }
@@ -57,7 +58,7 @@ struct ContentView: View {
         } header: {
             Text("Widgets")
         } footer: {
-            Text("Each service's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the fullest weekly limit under it.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
+            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the fullest weekly limit under it.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
         }
     }
 
@@ -71,38 +72,22 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func providerSection(_ provider: any Provider, now: Date) -> some View {
+    private func accountSection(_ provider: any Provider, now: Date) -> some View {
         let _ = model.revision
         let state = model.engine.state(provider)
-        let signedIn = model.isSignedIn(provider)
         Section {
-            if signedIn {
-                let dimmed = state.snapshot?.isStale(at: now, after: Shared.staleAfter) ?? true
-                ForEach(Array((state.snapshot?.limits ?? []).enumerated()), id: \.offset) { _, limit in
-                    LimitRow(limit: limit, now: now, dimmed: dimmed, showPace: model.settings.showPace)
-                        .padding(.vertical, 2)
-                }
-                if let notice = state.notice(at: now) {
-                    Label(notice, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-                Button("Open \(provider.name) Usage Page") { openURL(provider.usageURL) }
-                Button("Sign Out", role: .destructive) { model.signOut(provider) }
-            } else {
-                Button {
-                    Task { await model.signIn(provider) }
-                } label: {
-                    HStack {
-                        Text("Sign In to \(provider.name)")
-                        if model.signingIn == provider.id {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(model.signingIn != nil)
+            let dimmed = state.snapshot?.isStale(at: now, after: Shared.staleAfter) ?? true
+            ForEach(Array((state.snapshot?.limits ?? []).enumerated()), id: \.offset) { _, limit in
+                LimitRow(limit: limit, now: now, dimmed: dimmed, showPace: model.settings.showPace)
+                    .padding(.vertical, 2)
             }
+            if let notice = state.notice(at: now) {
+                Label(notice, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+            Button("Open Usage Page") { openURL(provider.usageURL) }
+            Button("Sign Out", role: .destructive) { model.signOut(provider) }
         } header: {
             HStack(alignment: .firstTextBaseline) {
                 Text(provider.name)
@@ -112,13 +97,39 @@ struct ContentView: View {
                 Spacer()
                 if model.engine.isFetching(provider) {
                     Text("Updating…").textCase(nil)
-                } else if signedIn, let snapshot = state.snapshot {
+                } else if let snapshot = state.snapshot {
                     Text(Format.age(snapshot.fetchedAt, now: now)).textCase(nil).monospacedDigit()
                 }
             }
         } footer: {
-            if !signedIn {
-                Text("Signs in to a session of the app's own, the same way `\(provider.id) login` does. The session on your Mac is not affected.")
+            if let email = model.emails[provider.id] {
+                Text(email)
+            }
+        }
+    }
+
+    /// A sign-in per service, then another account while there is room.
+    @ViewBuilder
+    private var signInSection: some View {
+        if model.canAddAccount {
+            Section {
+                ForEach(Service.allCases, id: \.self) { service in
+                    let signedIn = !model.ids(of: service).isEmpty
+                    Button {
+                        Task { await model.signIn(service) }
+                    } label: {
+                        HStack {
+                            Text(signedIn ? "Add \(service.name) Account" : "Sign In to \(service.name)")
+                            if model.signingIn == service {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(model.signingIn != nil)
+                }
+            } footer: {
+                Text("Signs in to a session of the app's own, the same way `claude login` and `codex login` do. The sessions on your Mac are not affected.")
             }
         }
     }

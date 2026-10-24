@@ -165,8 +165,11 @@ quota. So headroom:
 
 `iOS/` holds an iPhone app whose only job is to feed widgets: Usage for
 the home screen (small, medium, large) and the lock screen (a Stacked bar
-per provider, or one inline line), and Gauge, a lock screen ring for one
-limit you pick. It isn't published, so you build it onto your own phone
+per account, or one inline line), and Gauge, a lock screen ring for one
+limit of one account you pick. It holds up to four accounts in all, such
+as a personal and a work account of each provider, and numbers them when
+a provider has more than one: Claude 1 and Claude 2, C1 and C2 on the
+lock screen. It isn't published, so you build it onto your own phone
 with Xcode:
 
 1. Put your team in `iOS/Config/Local.xcconfig`, which git ignores:
@@ -179,7 +182,8 @@ with Xcode:
 A phone has no Claude Code or Codex to borrow from, so the app signs in
 itself, the way `claude login` and `codex login` do: the provider's own
 page opens in a sheet and redirects back to a listener on the phone's
-localhost. That is a session of its own, so the Mac's is never touched.
+localhost. Adding a second account of a provider opens the page without
+Safari's sign-in, so you can pick another account there. That is a session of its own, so the Mac's is never touched.
 The tokens stay in the phone's keychain, shared only with the widgets.
 Renewals take a lock, so the app and the widgets never rotate a refresh
 token out from under each other.

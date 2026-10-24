@@ -11,16 +11,16 @@ struct HeadroomWidgets: WidgetBundle {
     }
 }
 
-// MARK: Usage: the signed-in providers, or one of them
+// MARK: Usage: the signed-in accounts, or one service's
 
 enum ServiceChoice: String, AppEnum {
     case all, claude, codex
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Service"
-    static let caseDisplayRepresentations: [ServiceChoice: DisplayRepresentation] = [.all: "Both", .claude: "Claude", .codex: "Codex"]
+    static let caseDisplayRepresentations: [ServiceChoice: DisplayRepresentation] = [.all: "All", .claude: "Claude", .codex: "Codex"]
 
     func includes(_ row: UsageEntry.Row) -> Bool {
-        self == .all || row.id == rawValue
+        self == .all || Service(rawValue: rawValue)?.number(row.id) != nil
     }
 }
 
@@ -46,7 +46,7 @@ struct UsageWidget: Widget {
 
 struct UsageTimeline: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> UsageEntry {
-        .sample
+        .sample()
     }
 
     func snapshot(for configuration: UsageIntent, in context: Context) async -> UsageEntry {
@@ -59,13 +59,33 @@ struct UsageTimeline: AppIntentTimelineProvider {
     }
 }
 
-// MARK: Gauge: one limit of one provider, for the lock screen
+// MARK: Gauge: one limit of one account, for the lock screen
 
-enum ProviderChoice: String, AppEnum {
-    case claude, codex
+struct AccountEntity: AppEntity {
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Account"
+    static let defaultQuery = AccountQuery()
 
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Service"
-    static let caseDisplayRepresentations: [ProviderChoice: DisplayRepresentation] = [.claude: "Claude", .codex: "Codex"]
+    var id: String
+    var name: String
+    var email: String?
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(name)", subtitle: email.map { "\($0)" })
+    }
+}
+
+struct AccountQuery: EntityQuery {
+    func entities(for identifiers: [String]) async throws -> [AccountEntity] {
+        try await suggestedEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [AccountEntity] {
+        Shared.accounts().map { AccountEntity(id: $0.id, name: $0.name, email: $0.email) }
+    }
+
+    func defaultResult() async -> AccountEntity? {
+        try? await suggestedEntities().first
+    }
 }
 
 extension LimitChoice: AppEnum {
@@ -81,8 +101,8 @@ struct GaugeIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Limit"
     static let description = IntentDescription("Which limit the gauge shows.")
 
-    @Parameter(title: "Service", default: .claude)
-    var provider: ProviderChoice
+    @Parameter(title: "Account")
+    var account: AccountEntity?
 
     @Parameter(title: "Limit", default: .asInApp)
     var limit: LimitChoice
@@ -96,7 +116,7 @@ struct GaugeEntry: TimelineEntry {
 
 struct GaugeTimeline: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> GaugeEntry {
-        GaugeEntry(usage: .sample, configuration: GaugeIntent())
+        GaugeEntry(usage: .sample(), configuration: GaugeIntent())
     }
 
     func snapshot(for configuration: GaugeIntent, in context: Context) async -> GaugeEntry {
@@ -125,6 +145,6 @@ struct GaugeView: View {
     var entry: GaugeEntry
 
     var body: some View {
-        GaugeFace(entry: entry.usage, providerID: entry.configuration.provider.rawValue, limit: entry.configuration.limit)
+        GaugeFace(entry: entry.usage, accountID: entry.configuration.account?.id, limit: entry.configuration.limit)
     }
 }

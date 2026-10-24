@@ -5,7 +5,7 @@ import WidgetKit
 // The widgets' views live here rather than in the extension, so the app
 // can draw them too, for the demo renders.
 
-/// What every widget draws from: the signed-in providers' numbers, as of
+/// What every widget draws from: the signed-in accounts' numbers, as of
 /// the entry's date.
 struct UsageEntry: TimelineEntry {
     struct Row {
@@ -24,7 +24,7 @@ struct UsageEntry: TimelineEntry {
         row.snapshot?.isStale(at: date, after: Shared.staleAfter) ?? true
     }
 
-    /// The limit the provider leads with, as the Mac menu bar picks it.
+    /// The limit the account leads with, as the Mac menu bar picks it.
     func headline(_ row: Row) -> Limit? {
         row.snapshot?.headline(at: date, preferring: settings.limits[row.id])
     }
@@ -42,8 +42,9 @@ struct UsageEntry: TimelineEntry {
         return [headline] + all.filter { $0 != headline }
     }
 
-    /// For the widget gallery, before any sign-in.
-    static let sample: UsageEntry = {
+    /// For the widget gallery, before any sign-in: one account per service,
+    /// or with more `accounts`, a second of each.
+    static func sample(accounts: Int = 2) -> UsageEntry {
         let now = Date()
         func limit(_ kind: Limit.Kind, _ label: String, _ percent: Double, resetsIn: TimeInterval, window: TimeInterval) -> Limit {
             Limit(kind: kind, label: label, percent: percent, resetsAt: now.addingTimeInterval(resetsIn), windowSeconds: window)
@@ -57,11 +58,24 @@ struct UsageEntry: TimelineEntry {
             limit(.session, "Session", 13, resetsIn: 4 * 3600, window: 5 * 3600),
             limit(.weekly, "Weekly", 78, resetsIn: 86400, window: 7 * 86400),
         ], plan: "Pro", fetchedAt: now)
-        return UsageEntry(date: now, rows: [
-            Row(id: "claude", name: "Claude", glyph: "C", snapshot: claude),
-            Row(id: "codex", name: "Codex", glyph: "X", snapshot: codex),
-        ], settings: WidgetSettings(limits: ["claude": stackedChoice]))
-    }()
+        let claude2 = Snapshot(limits: [
+            limit(.session, "Session", 71, resetsIn: 3600, window: 5 * 3600),
+            limit(.weekly, "Weekly", 44, resetsIn: 5 * 86400, window: 7 * 86400),
+        ], plan: "Pro", fetchedAt: now)
+        let codex2 = Snapshot(limits: [
+            limit(.session, "Session", 5, resetsIn: 4.5 * 3600, window: 5 * 3600),
+            limit(.weekly, "Weekly", 22, resetsIn: 6 * 86400, window: 7 * 86400),
+        ], plan: "Plus", fetchedAt: now)
+        let shown = [(Service.claude, claude), (.codex, codex), (.claude, claude2), (.codex, codex2)].prefix(accounts)
+        let rows = Service.allCases.flatMap { service in
+            let snapshots = shown.filter { $0.0 == service }.map(\.1)
+            return snapshots.enumerated().map { index, snapshot in
+                let account = Account(service: service, number: index + 1, of: snapshots.count)
+                return Row(id: account.id, name: account.name, glyph: account.glyph, snapshot: snapshot)
+            }
+        }
+        return UsageEntry(date: now, rows: rows, settings: WidgetSettings(limits: [Service.claude.id(1): stackedChoice]))
+    }
 }
 
 extension UsageEntry.Row {
@@ -132,16 +146,18 @@ struct UsageView: View {
         return Text(parts.joined(separator: ", "))
     }
 
-    /// The Mac menu bar icon: per provider a letter, the bar of the limit
+    /// The Mac menu bar icon: per account a glyph, the bar of the limit
     /// it leads with (Stacked adds a weekly limit under it),
     /// and the number unless numbers are off.
     private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Wider for numbered glyphs, and closer together past two accounts.
+        let glyphWidth: CGFloat = entry.rows.contains { $0.glyph.count > 1 } ? 18 : 12
+        return VStack(alignment: .leading, spacing: entry.rows.count > 2 ? 2 : 6) {
             ForEach(entry.rows, id: \.id) { row in
                 let headline = entry.headline(row)
                 let weekly = entry.stackedWeekly(row)
                 HStack(spacing: 6) {
-                    Text(row.glyph).font(.caption.weight(.bold)).frame(width: 12)
+                    Text(row.glyph).font(.caption.weight(.bold)).frame(width: glyphWidth, alignment: .leading)
                     // Stacked: the session, and the weekly limit in a
                     // thinner lane under it, like the Mac menu bar.
                     VStack(spacing: 1) {
@@ -167,50 +183,66 @@ struct UsageView: View {
         }
     }
 
-    /// Per provider: the limit it leads with, and the next one.
+    /// Per account: the limit it leads with, and the next one. Past two
+    /// accounts, just the one it leads with, under the account's name.
     private var small: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: entry.rows.count > 2 ? 10 : 8) {
             ForEach(entry.rows, id: \.id) { row in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(row.name).font(.caption.weight(.semibold))
-                    limits(row, max: 2, showReset: false, font: .caption2, headlineFirst: true)
+                if entry.rows.count > 2 {
+                    limits(row, max: 1, showReset: false, font: .caption2, headlineFirst: true, title: row.name)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(row.name).font(.caption.weight(.semibold))
+                        limits(row, max: 2, showReset: false, font: .caption2, headlineFirst: true)
+                    }
                 }
             }
             Spacer(minLength: 0)
         }
     }
 
-    /// A column per provider, up to three limits each, with countdowns.
+    /// A column per account, up to three limits each, with countdowns when
+    /// there is room. Four accounts take two rows of two.
     private var medium: some View {
-        HStack(alignment: .top, spacing: 14) {
-            ForEach(entry.rows, id: \.id) { row in
-                VStack(alignment: .leading, spacing: 6) {
-                    header(row)
-                    // Countdowns too, when the column has room for them.
-                    limits(row, max: 3, showReset: entry.rows.allSatisfy { ($0.snapshot?.limits.count ?? 0) <= 2 }, font: .caption2)
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-    }
-
-    /// Everything, like the Mac menu.
-    private var large: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(entry.rows, id: \.id) { row in
-                VStack(alignment: .leading, spacing: 6) {
-                    header(row)
-                    limits(row, max: 4, showReset: true, font: .caption)
+        let count = entry.rows.count
+        let roomForResets = count <= 2 && entry.rows.allSatisfy { ($0.snapshot?.limits.count ?? 0) <= 2 }
+        return VStack(alignment: .leading, spacing: 0) {
+            grid(columns: count <= 3 ? count : 2, spacing: 10) { row in
+                VStack(alignment: .leading, spacing: count > 3 ? 4 : 6) {
+                    // Three columns leave no room for the plan.
+                    header(row, showPlan: count != 3)
+                    limits(row, max: count > 3 ? 2 : 3, showReset: roomForResets, font: .caption2)
                 }
             }
             Spacer(minLength: 0)
         }
     }
 
-    private func header(_ row: UsageEntry.Row) -> some View {
+    /// Everything, like the Mac menu. Past two accounts, in two columns.
+    private var large: some View {
+        let count = entry.rows.count
+        return VStack(alignment: .leading, spacing: 0) {
+            grid(columns: count <= 2 ? 1 : 2, spacing: count <= 2 ? 10 : 12) { row in
+                VStack(alignment: .leading, spacing: 6) {
+                    header(row)
+                    limits(row, max: count <= 2 ? 4 : 3, showReset: true, font: count <= 2 ? .caption : .caption2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// The accounts `columns` to a row, each column as wide as the others.
+    private func grid(columns: Int, spacing: CGFloat, @ViewBuilder cell: @escaping (UsageEntry.Row) -> some View) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .topLeading), count: columns), alignment: .leading, spacing: spacing) {
+            ForEach(entry.rows, id: \.id, content: cell)
+        }
+    }
+
+    private func header(_ row: UsageEntry.Row, showPlan: Bool = true) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(row.name).font(.caption.weight(.semibold))
-            if let plan = row.snapshot?.plan {
+            Text(row.name).font(.caption.weight(.semibold)).lineLimit(1).layoutPriority(1)
+            if showPlan, let plan = row.snapshot?.plan {
                 Text(plan).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -224,30 +256,32 @@ struct UsageView: View {
     }
 
     @ViewBuilder
-    private func limits(_ row: UsageEntry.Row, max count: Int, showReset: Bool, font: Font, headlineFirst: Bool = false) -> some View {
+    /// `title` names the first limit in place of its label.
+    private func limits(_ row: UsageEntry.Row, max count: Int, showReset: Bool, font: Font, headlineFirst: Bool = false, title: String? = nil) -> some View {
         if let snapshot = row.snapshot {
             let limits = headlineFirst ? entry.limitsLeadingWithHeadline(row) : snapshot.limits
-            ForEach(Array(limits.prefix(count).enumerated()), id: \.offset) { _, limit in
-                LimitRow(limit: limit, now: entry.date, dimmed: entry.isDimmed(row), showPace: entry.settings.showPace, showReset: showReset, font: font, barHeight: 4)
+            ForEach(Array(limits.prefix(count).enumerated()), id: \.offset) { index, limit in
+                LimitRow(limit: limit, title: index == 0 ? title : nil, now: entry.date, dimmed: entry.isDimmed(row), showPace: entry.settings.showPace, showReset: showReset, font: font, barHeight: 4)
             }
         } else {
-            Text(row.error ?? "No data yet").font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            Text([title, row.error ?? "No data yet"].compactMap { $0 }.joined(separator: ": ")).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
         }
     }
 }
 
-/// One limit of one provider as a ring, for the lock screen.
+/// One limit of one account as a ring, for the lock screen.
 struct GaugeFace: View {
     var entry: UsageEntry
-    var providerID: String
+    /// Nil for the first account, until one is picked.
+    var accountID: String?
     var limit: LimitChoice
 
     var body: some View {
-        let row = entry.rows.first { $0.id == providerID }
+        let row = if let accountID { entry.rows.first { $0.id == accountID } } else { entry.rows.first }
         let shown = row.flatMap { entry.limit(limit, of: $0) }
         let percent = shown?.percent(at: entry.date)
         Gauge(value: (percent ?? 0) / 100) {
-            Text(row?.glyph ?? String(providerID.prefix(1)).uppercased())
+            Text(row?.glyph ?? accountID.map { String($0.prefix(1)).uppercased() } ?? "")
         } currentValueLabel: {
             Text(percent.map { "\(Format.wholePercent($0))" } ?? "–").monospacedDigit()
         }

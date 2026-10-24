@@ -2,11 +2,9 @@ import Foundation
 
 /// A CLI's OAuth client, used the way the CLI's own login uses it.
 public struct OAuthClient: Sendable {
-    /// Also the provider id the tokens are stored under.
-    package enum Flavor: String, Sendable { case claude, codex }
+    package enum Flavor: Sendable { case claude, codex }
 
     package let flavor: Flavor
-    public var id: String { flavor.rawValue }
     package let authorizeURL: URL
     package let tokenURL: URL
     package let clientID: String
