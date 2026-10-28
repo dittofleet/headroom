@@ -47,7 +47,8 @@ outside the app, and its login item goes with it. If you installed the
 command line tool, uninstall it in Settings first.
 
 On Linux, the same command installs just the [`headroom`
-command](#on-linux) into `~/.local/bin`. Run it again to update.
+command](#on-linux) into `~/.local/bin`, the way every dittofleet CLI is
+installed.
 
 ## Updates
 
@@ -108,6 +109,13 @@ nobody asks makes no requests.
 It only reads the credentials Claude Code and Codex keep on the box,
 `~/.claude/.credentials.json` and `~/.codex/auth.json`, and never renews
 them, like Passive mode. There are no logins of its own.
+
+It keeps itself current like every dittofleet CLI: once a day, after a
+command run in a terminal, it installs a newer release if there is one.
+Agents and scripts never wait on that check. `headroom update` updates
+right away, `headroom --version` says which release this is, and
+`headroom uninstall` removes it along with its saved numbers. To turn the
+daily check off, set `HEADROOM_NO_UPDATE_CHECK=1`.
 
 ### Skill
 
@@ -228,7 +236,7 @@ then.
 
 | Path | What it is | Used by |
 | --- | --- | --- |
-| `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting. No platform code. | everything |
+| `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting, finding our own releases. No platform code. | everything |
 | `Sources/HeadroomBorrow` | Borrowing Claude Code's and the Codex CLI's sessions. Builds on Linux too. | Mac app, CLI |
 | `Sources/HeadroomMac` | Updating the app, the `headroom` link. | Mac app |
 | `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app, Mac app |

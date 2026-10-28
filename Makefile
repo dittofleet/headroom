@@ -38,9 +38,11 @@ zip: app
 
 # The command on its own, for Linux: static, so it runs on any distribution.
 # Needs the Static Linux SDK (swift.org/install), and on a Mac the swift.org
-# toolchain rather than Xcode's.
-LINUX_ARCH ?= x86_64
-LINUX_BUILD = swift build -c release --product headroom-cli --swift-sdk $(LINUX_ARCH)-swift-linux-musl -Xlinker -s
+# toolchain rather than Xcode's. LINUX_ARCH is x64 or arm64, as the release
+# assets are named.
+LINUX_ARCH ?= x64
+LINUX_SDK = $(if $(filter arm64,$(LINUX_ARCH)),aarch64,x86_64)-swift-linux-musl
+LINUX_BUILD = swift build -c release --product headroom-cli --swift-sdk $(LINUX_SDK) -Xlinker -s
 
 linux:
 	$(LINUX_BUILD)

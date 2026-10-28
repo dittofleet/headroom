@@ -8,18 +8,21 @@ import HeadroomBorrow
 //
 // On Linux there is no app, so it fetches itself, on the app's schedule:
 // only when the saved numbers are due, and once for all the calls waiting.
+// It is also installed and updated on its own, like any dittofleet CLI.
 
 let providerIDs = allProviders.map(\.id).joined(separator: "|")
 
 #if os(Linux)
-// No --version: there is no app bundle to read one from.
 let usage = """
     usage: headroom \(providerIDs) [--json]
+           headroom update
+           headroom uninstall [--yes]
 
     Prints your usage limits for one provider.
     Fetches them when the saved ones are over 5 minutes old.
 
       --json     machine-readable output, for agents and scripts
+      --version  print the version
     """
 #else
 let usage = """
@@ -45,15 +48,24 @@ if arguments.contains("--help") || arguments.contains("-h") {
     exit(0)
 }
 
-#if !os(Linux)
 if arguments.contains("--version") {
-    // The CLI has no Info.plist of its own, so it reads the app's.
-    // Not argv[0], which is just "headroom" when found through the PATH.
-    let plist = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
-        .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Info.plist")
-    let info = NSDictionary(contentsOf: plist)
-    print(info?["CFBundleShortVersionString"] as? String ?? "dev")
+    print(version)
     exit(0)
+}
+
+#if os(Linux)
+switch arguments.first {
+case "update":
+    await SelfUpdate.run()
+    exit(0)
+case "uninstall":
+    Uninstall.run(yes: arguments.contains("--yes"))
+    exit(0)
+case "postinstall":
+    // Run by the shared dittofleet install script. There is nothing to set up.
+    exit(0)
+default:
+    break
 }
 #endif
 
@@ -78,3 +90,6 @@ guard FileManager.default.fileExists(atPath: cacheFile.path) else {
 let now = Date()
 let report = UsageReport(Engine.savedStates(at: cacheFile)[provider.id] ?? ProviderState(), now: now)
 print(arguments.contains("--json") ? report.json() : report.text(name: provider.name, now: now))
+#if os(Linux)
+await SelfUpdate.checkDaily()
+#endif

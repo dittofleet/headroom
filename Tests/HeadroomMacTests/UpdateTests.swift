@@ -1,17 +1,8 @@
 import Foundation
 import Testing
 import HeadroomBorrow
+import HeadroomCore
 @testable import HeadroomMac
-
-@Test func versionsParseAndOrder() throws {
-    #expect(Version("v1.2.3")?.description == "v1.2.3")
-    #expect(Version("1.2.3") == Version("v1.2.3"))
-    for bad in ["", "dev", "v1.2", "v1.2.3.4", "v1.2.x", "v1..3", "v-1.2.3", "v1.2.3-beta", "v１.2.3", "v1.2.99999999999999999999"] {
-        #expect(Version(bad) == nil, "\(bad)")
-    }
-    let (a, b, c) = try (#require(Version("v0.9.9")), #require(Version("v0.10.0")), #require(Version("v1.0.0")))
-    #expect(a < b && b < c && !(b < a))
-}
 
 @Test func trustOnlyAcceptsRealTeamIDs() {
     #expect(Updater.Trust.team("ABCDE12345") != nil)
@@ -51,7 +42,8 @@ private struct FakeRelease {
         _ = await Subprocess.run("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--zlibCompressionLevel", "0", build.path, zip.path])
         let latest = root.appendingPathComponent("latest.json")
         try Data(#"{"tag_name": "\#(tag)"}"#.utf8).write(to: latest)
-        return Updater(latestURL: latest, assetURL: { [root] in root.appendingPathComponent("\($0).zip") }, bundleID: "test.headroom", trust: .unverified)
+        let releases = Releases(latestURL: latest, assetURL: { [root] version, _ in root.appendingPathComponent("\(version).zip") })
+        return Updater(releases: releases, asset: "Headroom.zip", bundleID: "test.headroom", trust: .unverified)
     }
 
     var payload: String {

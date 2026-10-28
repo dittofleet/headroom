@@ -386,3 +386,13 @@ private struct CountingProvider: Provider {
     #expect(HTTP.formEncoded([("a", "b c"), ("redirect_uri", "http://localhost:1/x?y=+")])
         == "a=b%20c&redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fx%3Fy%3D%2B")
 }
+
+@Test func versionsParseAndOrder() throws {
+    #expect(Version("v1.2.3")?.description == "v1.2.3")
+    #expect(Version("1.2.3") == Version("v1.2.3"))
+    for bad in ["", "dev", "v1.2", "v1.2.3.4", "v1.2.x", "v1..3", "v-1.2.3", "v1.2.3-beta", "v１.2.3", "v1.2.99999999999999999999"] {
+        #expect(Version(bad) == nil, "\(bad)")
+    }
+    let (a, b, c) = try (#require(Version("v0.9.9")), #require(Version("v0.10.0")), #require(Version("v1.0.0")))
+    #expect(a < b && b < c && !(b < a))
+}

@@ -3,24 +3,13 @@
 # Headroom.app, installs that instead (how `make install` installs a build
 # from source). To uninstall, quit Headroom and move it to the Trash.
 #
-# On Linux, installs the `headroom` command into ~/.local/bin. To
-# uninstall, delete it.
+# On Linux, installs just the `headroom` command, the way every dittofleet
+# CLI is installed.
 set -eu
 
-RELEASE="https://github.com/dittofleet/headroom/releases/latest/download"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-
 if [ "$(uname -s)" = "Linux" ]; then
-  DEST="${HEADROOM_INSTALL_DIR:-$HOME/.local/bin}"
-  URL="$RELEASE/headroom-linux-$(uname -m)"
-  echo "Downloading $URL..." >&2
-  curl -fsSL "$URL" -o "$TMP/headroom"
-  chmod +x "$TMP/headroom"
-  mkdir -p "$DEST"
-  mv "$TMP/headroom" "$DEST/headroom"
-  echo "Installed $DEST/headroom." >&2
-  exit 0
+  curl -fsSL https://raw.githubusercontent.com/dittofleet/.github/main/install.sh | sh -s headroom
+  exit
 fi
 
 DEST="${HEADROOM_INSTALL_DIR:-/Applications}"
@@ -35,10 +24,13 @@ if [ ! -w "$DEST" ]; then
   exit 1
 fi
 
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
 if [ $# -gt 0 ]; then
   ditto "$1" "$TMP/Headroom.app"
 else
-  URL="$RELEASE/Headroom.zip"
+  URL="https://github.com/dittofleet/headroom/releases/latest/download/Headroom.zip"
   echo "Downloading $URL..." >&2
   curl -fsSL "$URL" -o "$TMP/Headroom.zip"
   ditto -x -k "$TMP/Headroom.zip" "$TMP"

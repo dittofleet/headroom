@@ -3,29 +3,6 @@ import HeadroomBorrow
 import HeadroomCore
 import Security
 
-/// A release version, vX.Y.Z. The release workflow only tags that shape, so
-/// anything else is not a version.
-public struct Version: Comparable, Equatable, Sendable, CustomStringConvertible {
-    public let major: Int, minor: Int, patch: Int
-
-    public init?(_ string: String) {
-        let parts = string.drop { $0 == "v" }.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 3, parts.allSatisfy({ !$0.isEmpty && $0.count <= 6 && $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }) else { return nil }
-        (major, minor, patch) = (Int(parts[0])!, Int(parts[1])!, Int(parts[2])!)
-    }
-
-    public static func < (a: Version, b: Version) -> Bool {
-        (a.major, a.minor, a.patch) < (b.major, b.minor, b.patch)
-    }
-
-    public var description: String { "v\(major).\(minor).\(patch)" }
-}
-
-public struct UpdateError: Error, CustomStringConvertible, Sendable {
-    public let description: String
-    init(_ description: String) { self.description = description }
-}
-
 /// Finds the latest release and swaps it over the installed app.
 ///
 /// This app reads auth tokens, so an update is held to a higher bar than
@@ -49,40 +26,17 @@ public struct Updater: Sendable {
         static let unverified = Trust(requirement: nil)
     }
 
-    var latestURL: URL
-    var assetURL: @Sendable (Version) -> URL
+    var releases: Releases
+    var asset: String
     var bundleID: String
     var trust: Trust
 
-    public static func github(repo: String, asset: String, bundleID: String, trust: Trust) -> Updater {
-        Updater(
-            latestURL: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!,
-            assetURL: { URL(string: "https://github.com/\(repo)/releases/download/\($0)/\(asset)")! },
-            bundleID: bundleID,
-            trust: trust
-        )
+    public static func github(asset: String, bundleID: String, trust: Trust) -> Updater {
+        Updater(releases: .github, asset: asset, bundleID: bundleID, trust: trust)
     }
 
-    // Separate from the providers' session: release assets redirect to a
-    // CDN, and nothing here carries a token.
-    private static let session: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 5 * 60
-        return URLSession(configuration: config)
-    }()
-
     public func latest() async throws -> Version {
-        var request = URLRequest(url: latestURL)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await Self.session.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw UpdateError("HTTP \(http.statusCode) checking for updates")
-        }
-        guard let tag = Parse.object(data)?["tag_name"] as? String, let version = Version(tag) else {
-            throw UpdateError("Latest release has no vX.Y.Z tag")
-        }
-        return version
+        try await releases.latest()
     }
 
     /// Download `version`, prove it is ours, and move it over `appURL`. The
@@ -93,15 +47,12 @@ public struct Updater: Sendable {
         let staging = try files.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: appURL, create: true)
         defer { try? files.removeItem(at: staging) }
 
-        let (downloaded, response) = try await Self.session.download(from: assetURL(version))
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw UpdateError("HTTP \(http.statusCode) downloading \(version)")
-        }
-        let zip = staging.appendingPathComponent("update.zip")
-        try files.moveItem(at: downloaded, to: zip)
+        let download = try await releases.download(asset, of: version)
         // An error page or a truncated transfer, not a build.
-        let size = (try files.attributesOfItem(atPath: zip.path)[.size] as? Int) ?? 0
+        let size = download.count
         guard size > 20_000, size < 50_000_000 else { throw UpdateError("Download is an implausible \(size) bytes") }
+        let zip = staging.appendingPathComponent("update.zip")
+        try download.write(to: zip)
 
         let unpacked = staging.appendingPathComponent("unpacked")
         guard await Subprocess.run("/usr/bin/ditto", ["-x", "-k", zip.path, unpacked.path], timeout: 60) != nil else {

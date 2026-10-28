@@ -33,7 +33,7 @@ final class UpdateController {
         current = Version(appVersion)
         if let bundleID = Bundle.main.bundleIdentifier, current != nil, appURL.pathExtension == "app",
            let trust = Updater.ownTeamID().flatMap(Updater.Trust.team) {
-            updater = .github(repo: "dittofleet/headroom", asset: "Headroom.zip", bundleID: bundleID, trust: trust)
+            updater = .github(asset: "Headroom.zip", bundleID: bundleID, trust: trust)
         } else {
             updater = nil
         }
