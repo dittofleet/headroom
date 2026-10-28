@@ -8,7 +8,11 @@
 set -eu
 
 if [ "$(uname -s)" = "Linux" ]; then
-  curl -fsSL https://raw.githubusercontent.com/dittofleet/.github/main/install.sh | sh -s headroom
+  # Downloaded first, so a failed download fails the install.
+  SCRIPT=$(mktemp)
+  trap 'rm -f "$SCRIPT"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/dittofleet/.github/main/install.sh -o "$SCRIPT"
+  sh "$SCRIPT" headroom
   exit
 fi
 

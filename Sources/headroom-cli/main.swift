@@ -83,7 +83,7 @@ guard names.count == 1, let provider = allProviders.first(where: { $0.id == name
 
 guard let cacheFile = Engine.defaultCacheFile else { fail("no cache folder") }
 #if os(Linux)
-let lock = cacheFile.deletingLastPathComponent().appendingPathComponent("\(provider.id).lock")
+let lock = cacheFile.deletingLastPathComponent().appendingPathComponent("fetch.lock")
 await Engine(providers: [provider], cacheFile: cacheFile).refreshAndWait(lockedBy: lock)
 #else
 guard FileManager.default.fileExists(atPath: cacheFile.path) else {
