@@ -27,12 +27,13 @@ public struct Updater: Sendable {
     }
 
     var releases: Releases
-    var asset: String
     var bundleID: String
     var trust: Trust
 
-    public static func github(asset: String, bundleID: String, trust: Trust) -> Updater {
-        Updater(releases: .github, asset: asset, bundleID: bundleID, trust: trust)
+    static let asset = "Headroom.zip"
+
+    public static func github(bundleID: String, trust: Trust) -> Updater {
+        Updater(releases: .github, bundleID: bundleID, trust: trust)
     }
 
     public func latest() async throws -> Version {
@@ -47,7 +48,7 @@ public struct Updater: Sendable {
         let staging = try files.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: appURL, create: true)
         defer { try? files.removeItem(at: staging) }
 
-        let download = try await releases.download(asset, of: version)
+        let download = try await releases.download(Self.asset, of: version)
         // An error page or a truncated transfer, not a build.
         let size = download.count
         guard size > 20_000, size < 50_000_000 else { throw UpdateError("Download is an implausible \(size) bytes") }

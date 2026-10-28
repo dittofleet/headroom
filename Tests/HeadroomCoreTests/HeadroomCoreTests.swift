@@ -96,7 +96,11 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(ClaudeProvider.parseRenewal(Data(#"{"error": "invalid_grant"}"#.utf8), now: now) == nil)
 }
 
-@Test func booleansAreNotNumbers() {
+@Test func booleansAreNotNumbers() throws {
+    let parsed = try #require(Parse.object(Data(#"{"zero": 0, "one": 1, "half": 0.5, "big": 1789891084074, "yes": true, "no": false}"#.utf8)))
+    #expect(Parse.number(parsed["zero"]) == 0 && Parse.number(parsed["one"]) == 1)
+    #expect(Parse.number(parsed["half"]) == 0.5 && Parse.number(parsed["big"]) == 1_789_891_084_074)
+    #expect(Parse.number(parsed["yes"]) == nil && Parse.number(parsed["no"]) == nil)
     #expect(Parse.epochDate(true) == nil)
     #expect(Parse.number(false) == nil)
 }

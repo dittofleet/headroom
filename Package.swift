@@ -17,6 +17,7 @@ let package = Package(
         // have.
         .target(name: "HeadroomBorrow", dependencies: ["HeadroomCore"]),
         // Mac only: updating the app, and the `headroom` command's link.
+        // HeadroomBorrow is for its Subprocess.
         .target(name: "HeadroomMac", dependencies: ["HeadroomCore", "HeadroomBorrow"]),
         // Sessions of our own, signed in from the app, for where there is no
         // CLI to borrow one from (the phone), or on the Mac when asked to.
@@ -41,5 +42,5 @@ let package = Package(
 // or Apple's frameworks for logins of our own.
 let linux: Set = ["HeadroomCore", "HeadroomBorrow", "headroom-cli", "HeadroomCoreTests", "HeadroomBorrowTests"]
 package.targets.removeAll { !linux.contains($0.name) }
-package.products.removeAll { $0.name == "HeadroomAccounts" }
+package.products.removeAll { !linux.contains($0.name) }
 #endif

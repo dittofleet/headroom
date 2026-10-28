@@ -9,18 +9,19 @@ enum Uninstall {
         guard Version(version) != nil else { fail("cannot uninstall a dev build") }
         guard let binary = SelfUpdate.binary else { fail("cannot find the running binary") }
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        var items = [
+        let files = [
             ("Numbers", Engine.defaultCacheFile?.deletingLastPathComponent()),
             ("Data", SelfUpdate.dataDirectory),
-            // Foundation's on Linux, made for any URLSession, even one that caches nothing.
-            ("Cache", caches.appendingPathComponent("org.swift.foundation.URLCache/headroom")),
+            // Foundation's: on Linux, URLSessionConfiguration.ephemeral itself
+            // makes it, named after the process, so it can't be avoided.
+            ("Cache", caches.appendingPathComponent("org.swift.foundation.URLCache/\(ProcessInfo.processInfo.processName)")),
         ]
             .compactMap { label, url in url.map { (label, $0) } }
             .filter { FileManager.default.fileExists(atPath: $0.1.path) }
-        items.append(("Binary", binary))
+        let binaryItem = ("Binary", binary)
 
         print("This will remove:")
-        for (label, url) in [items.last!] + items.dropLast() {
+        for (label, url) in [binaryItem] + files {
             print("  - \((label + ":").padding(toLength: 9, withPad: " ", startingAt: 0))\(url.path)")
         }
         print("\nClaude Code's and Codex's logins are left as they are.\n")
@@ -36,7 +37,7 @@ enum Uninstall {
         }
 
         var removed: [String] = []
-        for (label, url) in items {
+        for (label, url) in files + [binaryItem] {
             do {
                 try FileManager.default.removeItem(at: url)
             } catch {

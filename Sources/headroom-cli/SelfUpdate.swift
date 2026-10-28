@@ -39,7 +39,7 @@ enum SelfUpdate {
             try await install(latest, timeout: 5 * 60)
             print("Updated \(current) -> \(latest)")
         } catch {
-            fail(describe(error))
+            fail(error.localizedDescription)
         }
     }
 
@@ -55,28 +55,23 @@ enum SelfUpdate {
         else { return }
 
         let saved = Check.load()
-        if let saved, now.timeIntervalSince(saved.lastCheck) < 24 * 60 * 60 {
-            // Newer than this binary only when installing it failed earlier.
-            if let latest = Version(saved.latestVersion), current < latest { hint(latest, current: current) }
-            return
-        }
-        guard let latest = try? await Releases.github.latest(timeout: 2) else {
-            // Recorded anyway, so an unreachable network costs one timeout a
-            // day rather than one on every command. A release found before
-            // is only hinted: a download would just time out too.
-            let known = saved?.latestVersion ?? current.description
-            Check(lastCheck: now, latestVersion: known).save()
-            if let latest = Version(known), current < latest { hint(latest, current: current) }
-            return
-        }
-        Check(lastCheck: now, latestVersion: latest.description).save()
-        guard current < latest else { return }
-        do {
+        // Newer than this binary only when installing it failed before.
+        var latest = saved.flatMap { Version($0.latestVersion) }
+        if saved.map({ now.timeIntervalSince($0.lastCheck) >= 24 * 60 * 60 }) ?? true {
+            let fetched = try? await Releases.github.latest(timeout: 2)
+            // Recorded even when offline, so an unreachable network costs
+            // one timeout a day rather than one on every command. A release
+            // found before is then only hinted: a download would time out too.
+            latest = fetched ?? latest
+            Check(lastCheck: now, latestVersion: (latest ?? current).description).save()
             // Short, as the user is waiting on a command that has finished.
-            try await install(latest, timeout: 30)
-            printError("\nUpdated headroom \(current) -> \(latest)")
-        } catch {
-            hint(latest, current: current)
+            if let fetched, current < fetched, (try? await install(fetched, timeout: 30)) != nil {
+                printError("\nUpdated headroom \(current) -> \(fetched)")
+                return
+            }
+        }
+        if let latest, current < latest {
+            printError("\nheadroom \(latest) is available (current: \(current)). Run `headroom update` to install.")
         }
     }
 
@@ -99,10 +94,6 @@ enum SelfUpdate {
         }
     }
 
-    private static func hint(_ latest: Version, current: Version) {
-        printError("\nheadroom \(latest) is available (current: \(current)). Run `headroom update` to install.")
-    }
-
     /// The last check's result.
     private struct Check: Codable {
         var lastCheck: Date
@@ -119,13 +110,5 @@ enum SelfUpdate {
             try? JSONEncoder().encode(self).write(to: Self.file, options: .atomic)
         }
     }
-}
-
-func describe(_ error: Error) -> String {
-    (error as? UpdateError)?.description ?? error.localizedDescription
-}
-
-func printError(_ message: String) {
-    FileHandle.standardError.write(Data((message + "\n").utf8))
 }
 #endif

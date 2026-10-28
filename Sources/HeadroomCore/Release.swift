@@ -21,25 +21,23 @@ public struct Version: Comparable, Equatable, Sendable, CustomStringConvertible 
     public var description: String { "v\(major).\(minor).\(patch)" }
 }
 
-public struct UpdateError: Error, CustomStringConvertible, Sendable {
-    public let description: String
-    package init(_ description: String) { self.description = description }
+public struct UpdateError: LocalizedError, Sendable {
+    public let errorDescription: String?
+    package init(_ description: String) { errorDescription = description }
 }
 
 /// headroom's releases on GitHub, which the app and the Linux command both
 /// update themselves from.
 public struct Releases: Sendable {
-    var latestURL: URL
-    var assetURL: @Sendable (Version, String) -> URL
+    let latestURL: URL
+    let assetURL: @Sendable (Version, String) -> URL
 
-    public static let github = Releases(repo: "dittofleet/headroom")
+    public static let github = Releases(
+        latestURL: URL(string: "https://api.github.com/repos/dittofleet/headroom/releases/latest")!,
+        assetURL: { URL(string: "https://github.com/dittofleet/headroom/releases/download/\($0)/\($1)")! }
+    )
 
-    init(repo: String) {
-        latestURL = URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!
-        assetURL = { URL(string: "https://github.com/\(repo)/releases/download/\($0)/\($1)")! }
-    }
-
-    /// For tests, which publish to files.
+    /// Also for tests, which publish to files.
     package init(latestURL: URL, assetURL: @escaping @Sendable (Version, String) -> URL) {
         self.latestURL = latestURL
         self.assetURL = assetURL

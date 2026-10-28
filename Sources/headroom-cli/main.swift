@@ -38,8 +38,12 @@ let usage = """
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
+func printError(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 func fail(_ message: String, code: Int32 = 1) -> Never {
-    FileHandle.standardError.write(Data("headroom: \(message)\n".utf8))
+    printError("headroom: \(message)")
     exit(code)
 }
 

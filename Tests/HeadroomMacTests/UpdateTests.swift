@@ -43,7 +43,7 @@ private struct FakeRelease {
         let latest = root.appendingPathComponent("latest.json")
         try Data(#"{"tag_name": "\#(tag)"}"#.utf8).write(to: latest)
         let releases = Releases(latestURL: latest, assetURL: { [root] version, _ in root.appendingPathComponent("\(version).zip") })
-        return Updater(releases: releases, asset: "Headroom.zip", bundleID: "test.headroom", trust: .unverified)
+        return Updater(releases: releases, bundleID: "test.headroom", trust: .unverified)
     }
 
     var payload: String {
