@@ -8,7 +8,42 @@ permissions:
   contents: write
 
 jobs:
+  # The Linux command, static so it runs on any distribution, named the way
+  # every dittofleet CLI's assets are, for the shared install script and
+  # `headroom update`.
+  linux:
+    runs-on: ubuntu-latest
+    container: swift:6.4.1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install make and the Static Linux SDK
+        run: |
+          apt-get update && apt-get install -y make
+          swift sdk install \
+            https://download.swift.org/swift-6.4.1-release/static-sdk/swift-6.4.1-RELEASE/swift-6.4.1-RELEASE_static-linux-0.1.0.artifactbundle.tar.gz \
+            --checksum cef5592d7430ed3c5ae1ddda479849c6f5252bd94a5723db1559f984caf38a7c
+
+      - name: Test
+        run: make test
+
+      - name: Build
+        run: |
+          # The tag, for --version and for updates to compare against.
+          sed -i "s/^let version = \"dev\"$/let version = \"$GITHUB_REF_NAME\"/" Sources/headroom-cli/Version.swift
+          grep -q "^let version = \"$GITHUB_REF_NAME\"$" Sources/headroom-cli/Version.swift
+          make linux LINUX_ARCH=x64
+          make linux LINUX_ARCH=arm64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: dist/headroom-linux-*
+
   release:
+    needs: linux
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -77,11 +112,16 @@ jobs:
           rm dist/Headroom.zip
           ditto -c -k --keepParent dist/Headroom.app dist/Headroom.zip
 
-      # The asset name is what install.sh and the app's updater download.
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux
+          path: dist
+
+      # The asset names are what install.sh and the app's updater download.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --generate-notes \
-            dist/Headroom.zip
+            dist/Headroom.zip dist/headroom-linux-*

@@ -33,7 +33,7 @@ final class UpdateController {
         current = Version(appVersion)
         if let bundleID = Bundle.main.bundleIdentifier, current != nil, appURL.pathExtension == "app",
            let trust = Updater.ownTeamID().flatMap(Updater.Trust.team) {
-            updater = .github(repo: "dittofleet/headroom", asset: "Headroom.zip", bundleID: bundleID, trust: trust)
+            updater = .github(bundleID: bundleID, trust: trust)
         } else {
             updater = nil
         }
@@ -67,7 +67,7 @@ final class UpdateController {
                     set(status: "Up to date")
                 }
             } catch {
-                set(status: "Update failed", detail: (error as? UpdateError)?.description ?? error.localizedDescription)
+                set(status: "Update failed", detail: error.localizedDescription)
             }
             busy = false
         }

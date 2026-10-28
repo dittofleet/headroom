@@ -2,13 +2,25 @@
 # Installs the latest release into /Applications. Given a path to a
 # Headroom.app, installs that instead (how `make install` installs a build
 # from source). To uninstall, quit Headroom and move it to the Trash.
+#
+# On Linux, installs just the `headroom` command, the way every dittofleet
+# CLI is installed.
 set -eu
+
+if [ "$(uname -s)" = "Linux" ]; then
+  # Downloaded first, so a failed download fails the install.
+  SCRIPT=$(mktemp)
+  trap 'rm -f "$SCRIPT"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/dittofleet/.github/main/install.sh -o "$SCRIPT"
+  sh "$SCRIPT" headroom
+  exit
+fi
 
 DEST="${HEADROOM_INSTALL_DIR:-/Applications}"
 APP="$DEST/Headroom.app"
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  echo "headroom is a macOS menu bar app, got: $(uname -s)" >&2
+  echo "headroom runs on macOS and Linux, got: $(uname -s)" >&2
   exit 1
 fi
 if [ ! -w "$DEST" ]; then

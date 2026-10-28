@@ -1,11 +1,17 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 package enum HTTP {
     private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
+        // Already so on Linux, where it can't be set.
+        #if canImport(Darwin)
         config.waitsForConnectivity = false
+        #endif
         return URLSession(configuration: config, delegate: NoRedirects(), delegateQueue: nil)
     }()
 
@@ -94,8 +100,9 @@ package enum Parse {
     }
 
     package static func number(_ value: Any?) -> Double? {
-        // NSNumber also wraps JSON booleans; a bool is never a percentage.
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        // NSNumber also wraps JSON booleans, as a char, and a bool is never
+        // a percentage. Not `is Bool`, which also matches 0 and 1 on Linux.
+        guard let number = value as? NSNumber, String(cString: number.objCType) != "c" else { return nil }
         return number.doubleValue
     }
 

@@ -1,13 +1,32 @@
 import Foundation
 import HeadroomCore
-import HeadroomMac
+import HeadroomBorrow
 
-// Shipped inside Headroom.app and linked onto the PATH as `headroom`. It
-// only reads what the running app last saved: fetching from here would
-// spend the same small quota the app depends on.
+// On a Mac, shipped inside Headroom.app and linked onto the PATH as
+// `headroom`. It only reads what the running app last saved: fetching from
+// here would spend the same small quota the app depends on.
+//
+// On Linux there is no app, so it fetches itself, on the app's schedule:
+// only when the saved numbers are due, and once for all the calls waiting.
+// It is also installed and updated on its own, like any dittofleet CLI.
 
+let providerIDs = allProviders.map(\.id).joined(separator: "|")
+
+#if os(Linux)
 let usage = """
-    usage: headroom \(allProviders.map(\.id).joined(separator: "|")) [--json]
+    usage: headroom \(providerIDs) [--json]
+           headroom update
+           headroom uninstall [--yes]
+
+    Prints your usage limits for one provider.
+    Fetches them when the saved ones are over 5 minutes old.
+
+      --json     machine-readable output, for agents and scripts
+      --version  print the version
+    """
+#else
+let usage = """
+    usage: headroom \(providerIDs) [--json]
 
     Prints your usage limits for one provider as Headroom last saw them.
     Headroom refreshes every 5 minutes while it runs. This never fetches.
@@ -15,11 +34,16 @@ let usage = """
       --json     machine-readable output, for agents and scripts
       --version  print the version
     """
+#endif
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
+func printError(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 func fail(_ message: String, code: Int32 = 1) -> Never {
-    FileHandle.standardError.write(Data("headroom: \(message)\n".utf8))
+    printError("headroom: \(message)")
     exit(code)
 }
 
@@ -29,14 +53,25 @@ if arguments.contains("--help") || arguments.contains("-h") {
 }
 
 if arguments.contains("--version") {
-    // The CLI has no Info.plist of its own, so it reads the app's.
-    // Not argv[0], which is just "headroom" when found through the PATH.
-    let plist = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
-        .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Info.plist")
-    let info = NSDictionary(contentsOf: plist)
-    print(info?["CFBundleShortVersionString"] as? String ?? "dev")
+    print(version)
     exit(0)
 }
+
+#if os(Linux)
+switch arguments.first {
+case "update":
+    await SelfUpdate.run()
+    exit(0)
+case "uninstall":
+    Uninstall.run(yes: arguments.contains("--yes"))
+    exit(0)
+case "postinstall":
+    // Run by the shared dittofleet install script. There is nothing to set up.
+    exit(0)
+default:
+    break
+}
+#endif
 
 let names = arguments.filter { !$0.hasPrefix("-") }
 if let unknown = arguments.first(where: { $0.hasPrefix("-") && $0 != "--json" }) {
@@ -46,10 +81,19 @@ guard names.count == 1, let provider = allProviders.first(where: { $0.id == name
     fail(names.isEmpty ? "which provider?\n\n\(usage)" : "unknown provider \(names.joined(separator: " "))\n\n\(usage)", code: 2)
 }
 
-guard let cacheFile = Engine.defaultCacheFile, FileManager.default.fileExists(atPath: cacheFile.path) else {
+guard let cacheFile = Engine.defaultCacheFile else { fail("no cache folder") }
+#if os(Linux)
+let lock = cacheFile.deletingLastPathComponent().appendingPathComponent("fetch.lock")
+await Engine(providers: [provider], cacheFile: cacheFile).refreshAndWait(lockedBy: lock)
+#else
+guard FileManager.default.fileExists(atPath: cacheFile.path) else {
     fail("no usage numbers yet. Open Headroom, which saves them for this command.")
 }
+#endif
 
 let now = Date()
 let report = UsageReport(Engine.savedStates(at: cacheFile)[provider.id] ?? ProviderState(), now: now)
 print(arguments.contains("--json") ? report.json() : report.text(name: provider.name, now: now))
+#if os(Linux)
+await SelfUpdate.checkDaily()
+#endif

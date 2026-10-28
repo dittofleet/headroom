@@ -96,7 +96,11 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(ClaudeProvider.parseRenewal(Data(#"{"error": "invalid_grant"}"#.utf8), now: now) == nil)
 }
 
-@Test func booleansAreNotNumbers() {
+@Test func booleansAreNotNumbers() throws {
+    let parsed = try #require(Parse.object(Data(#"{"zero": 0, "one": 1, "half": 0.5, "big": 1789891084074, "yes": true, "no": false}"#.utf8)))
+    #expect(Parse.number(parsed["zero"]) == 0 && Parse.number(parsed["one"]) == 1)
+    #expect(Parse.number(parsed["half"]) == 0.5 && Parse.number(parsed["big"]) == 1_789_891_084_074)
+    #expect(Parse.number(parsed["yes"]) == nil && Parse.number(parsed["no"]) == nil)
     #expect(Parse.epochDate(true) == nil)
     #expect(Parse.number(false) == nil)
 }
@@ -260,6 +264,42 @@ private struct GatedProvider: Provider {
     #expect(engine.state(provider).snapshot == nil)
 }
 
+/// Counts its fetches, each of which takes a moment so that callers overlap.
+private struct CountingProvider: Provider {
+    var id = "counting", name = "Counting", glyph = "C"
+    let usageURL = URL(string: "https://example.com")!
+    let fetches = Counter()
+
+    func fetch() async -> Result<Snapshot, FetchFailure> {
+        await fetches.increment()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        return .success(Snapshot(limits: [], plan: nil, fetchedAt: Date()))
+    }
+
+    actor Counter {
+        private(set) var count = 0
+        func increment() { count += 1 }
+    }
+}
+
+/// The `headroom` command on Linux, called by several agents at once.
+@MainActor @Test func lockedRefreshesFetchOnceBetweenThem() async {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("headroom-test-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let file = dir.appendingPathComponent("state.json"), lock = dir.appendingPathComponent("counting.lock")
+    let provider = CountingProvider()
+    func call() async { await Engine(providers: [provider], cacheFile: file).refreshAndWait(lockedBy: lock) }
+
+    await withTaskGroup(of: Void.self) { group in
+        for _ in 0..<3 { group.addTask { await call() } }
+    }
+    #expect(await provider.fetches.count == 1)
+    #expect(Engine.savedStates(at: file)[provider.id]?.snapshot != nil)
+    // Until they are due, the saved numbers are all a call gets.
+    await call()
+    #expect(await provider.fetches.count == 1)
+}
+
 @MainActor @Test func engineHonorsCooldownsAndKeepsLastGoodData() {
     let provider = StubProvider()
     let engine = Engine(providers: [provider], cacheFile: nil)
@@ -349,4 +389,14 @@ private struct GatedProvider: Provider {
 @Test func formEncodingEscapesReservedCharacters() {
     #expect(HTTP.formEncoded([("a", "b c"), ("redirect_uri", "http://localhost:1/x?y=+")])
         == "a=b%20c&redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fx%3Fy%3D%2B")
+}
+
+@Test func versionsParseAndOrder() throws {
+    #expect(Version("v1.2.3")?.description == "v1.2.3")
+    #expect(Version("1.2.3") == Version("v1.2.3"))
+    for bad in ["", "dev", "v1.2", "v1.2.3.4", "v1.2.x", "v1..3", "v-1.2.3", "v1.2.3-beta", "v１.2.3", "v1.2.99999999999999999999"] {
+        #expect(Version(bad) == nil, "\(bad)")
+    }
+    let (a, b, c) = try (#require(Version("v0.9.9")), #require(Version("v0.10.0")), #require(Version("v1.0.0")))
+    #expect(a < b && b < c && !(b < a))
 }

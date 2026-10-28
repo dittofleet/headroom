@@ -1,5 +1,6 @@
 import AppKit
 import HeadroomAccounts
+import HeadroomBorrow
 import HeadroomCore
 import HeadroomMac
 import SwiftUI

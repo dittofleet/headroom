@@ -46,6 +46,10 @@ To uninstall, quit Headroom and move it to the Trash. Nothing is installed
 outside the app, and its login item goes with it. If you installed the
 command line tool, uninstall it in Settings first.
 
+On Linux, the same command installs just the [`headroom`
+command](#on-linux) into `~/.local/bin`, the way every dittofleet CLI is
+installed.
+
 ## Updates
 
 headroom keeps itself current. A few times a day it asks GitHub for the
@@ -92,6 +96,28 @@ To get it, install it in Settings under "Command line tool". That links
 `headroom` into `~/.local/bin` to the binary inside the app, so it updates
 with the app. Headroom only ever touches a link it made, and if the app
 moves it repoints that link the next time it starts.
+
+### On Linux
+
+There is no app on Linux, so `headroom` is the whole of it, for agents on
+headless boxes. It works the same, except that it fetches the numbers
+itself when the saved ones are due, on the app's schedule: at most every 5
+minutes, never inside a server cooldown, and once for all the agents that
+ask at the same moment, while the rest wait for what it saves. A box where
+nobody asks makes no requests.
+
+It only reads the credentials Claude Code and Codex keep on the box,
+`~/.claude/.credentials.json` and `~/.codex/auth.json`, and never renews
+them, like Passive mode. There are no logins of its own.
+
+It keeps itself current like every dittofleet CLI: once a day, after a
+command run in a terminal, it installs a newer release if there is one.
+Agents and scripts never wait on that check. `headroom update` updates
+right away, `headroom --version` says which release this is, and
+`headroom uninstall` removes it along with its saved numbers. To turn the
+daily check off, set `HEADROOM_NO_UPDATE_CHECK=1`.
+
+### Skill
 
 [`skills/headroom`](skills/headroom/SKILL.md) is an agent skill that tells
 agents how to check. Copy it into
@@ -210,8 +236,9 @@ then.
 
 | Path | What it is | Used by |
 | --- | --- | --- |
-| `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting. No platform code. | everything |
-| `Sources/HeadroomMac` | Borrowing Claude Code's and the Codex CLI's sessions, updating the app, the `headroom` link. | Mac app, CLI |
+| `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting, finding our own releases. No platform code. | everything |
+| `Sources/HeadroomBorrow` | Borrowing Claude Code's and the Codex CLI's sessions. Builds on Linux too. | Mac app, CLI |
+| `Sources/HeadroomMac` | Updating the app, the `headroom` link. | Mac app |
 | `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app, Mac app |
 | `Sources/Headroom` | The menu bar app. | |
 | `Sources/headroom-cli` | The `headroom` command. | |
@@ -219,6 +246,7 @@ then.
 | `skills/headroom` | The agent skill. | |
 
 Each library has its own test target in `Tests/`, so `swift test` covers
-all three. A new platform would need only `HeadroomCore`, plus
-`HeadroomAccounts` if it has no CLI to borrow a session from, or should
-not touch the CLI's.
+all four, and on Linux the two that build there. A new platform would need
+only `HeadroomCore`, plus `HeadroomBorrow` if it has a CLI to borrow a
+session from, or `HeadroomAccounts` if it has none, or should not touch
+the CLI's.

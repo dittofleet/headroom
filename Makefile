@@ -36,6 +36,19 @@ install: app
 zip: app
 	cd dist && rm -f Headroom.zip && ditto -c -k --keepParent Headroom.app Headroom.zip
 
+# The command on its own, for Linux: static, so it runs on any distribution.
+# Needs the Static Linux SDK (swift.org/install), and on a Mac the swift.org
+# toolchain rather than Xcode's. LINUX_ARCH is x64 or arm64, as the release
+# assets are named.
+LINUX_ARCH ?= x64
+LINUX_SDK = $(if $(filter arm64,$(LINUX_ARCH)),aarch64,x86_64)-swift-linux-musl
+LINUX_BUILD = swift build -c release --product headroom-cli --swift-sdk $(LINUX_SDK) -Xlinker -s
+
+linux:
+	$(LINUX_BUILD)
+	mkdir -p dist
+	cp "$$($(LINUX_BUILD) --show-bin-path)/headroom-cli" dist/headroom-linux-$(LINUX_ARCH)
+
 test:
 	swift test
 
@@ -46,4 +59,4 @@ icon:
 clean:
 	rm -rf .build dist
 
-.PHONY: app install zip test icon clean
+.PHONY: app install zip linux test icon clean
