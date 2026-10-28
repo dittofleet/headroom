@@ -100,8 +100,8 @@ package enum Parse {
     }
 
     package static func number(_ value: Any?) -> Double? {
-        // NSNumber also wraps JSON booleans, as a char; a bool is never a
-        // percentage. Not `is Bool`, which also matches 0 and 1 on Linux.
+        // NSNumber also wraps JSON booleans, as a char, and a bool is never
+        // a percentage. Not `is Bool`, which also matches 0 and 1 on Linux.
         guard let number = value as? NSNumber, String(cString: number.objCType) != "c" else { return nil }
         return number.doubleValue
     }
