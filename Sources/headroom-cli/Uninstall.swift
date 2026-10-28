@@ -8,7 +8,13 @@ enum Uninstall {
     static func run(yes: Bool) {
         guard Version(version) != nil else { fail("cannot uninstall a dev build") }
         guard let binary = SelfUpdate.binary else { fail("cannot find the running binary") }
-        var items = [("Numbers", Engine.defaultCacheFile?.deletingLastPathComponent()), ("Data", SelfUpdate.dataDirectory)]
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        var items = [
+            ("Numbers", Engine.defaultCacheFile?.deletingLastPathComponent()),
+            ("Data", SelfUpdate.dataDirectory),
+            // Foundation's on Linux, made for any URLSession, even one that caches nothing.
+            ("Cache", caches.appendingPathComponent("org.swift.foundation.URLCache/headroom")),
+        ]
             .compactMap { label, url in url.map { (label, $0) } }
             .filter { FileManager.default.fileExists(atPath: $0.1.path) }
         items.append(("Binary", binary))
