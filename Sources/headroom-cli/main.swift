@@ -9,25 +9,29 @@ import HeadroomBorrow
 // On Linux there is no app, so it fetches itself, on the app's schedule:
 // only when the saved numbers are due, and once for all the calls waiting.
 
+let providerIDs = allProviders.map(\.id).joined(separator: "|")
+
 #if os(Linux)
-let freshness = """
+// No --version: there is no app bundle to read one from.
+let usage = """
+    usage: headroom \(providerIDs) [--json]
+
+    Prints your usage limits for one provider.
     Fetches them when the saved ones are over 5 minutes old.
+
+      --json     machine-readable output, for agents and scripts
     """
 #else
-let freshness = """
-    Headroom refreshes every 5 minutes while it runs. This never fetches.
-    """
-#endif
-
 let usage = """
-    usage: headroom \(allProviders.map(\.id).joined(separator: "|")) [--json]
+    usage: headroom \(providerIDs) [--json]
 
     Prints your usage limits for one provider as Headroom last saw them.
-    \(freshness)
+    Headroom refreshes every 5 minutes while it runs. This never fetches.
 
       --json     machine-readable output, for agents and scripts
       --version  print the version
     """
+#endif
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
@@ -41,6 +45,7 @@ if arguments.contains("--help") || arguments.contains("-h") {
     exit(0)
 }
 
+#if !os(Linux)
 if arguments.contains("--version") {
     // The CLI has no Info.plist of its own, so it reads the app's.
     // Not argv[0], which is just "headroom" when found through the PATH.
@@ -50,6 +55,7 @@ if arguments.contains("--version") {
     print(info?["CFBundleShortVersionString"] as? String ?? "dev")
     exit(0)
 }
+#endif
 
 let names = arguments.filter { !$0.hasPrefix("-") }
 if let unknown = arguments.first(where: { $0.hasPrefix("-") && $0 != "--json" }) {
