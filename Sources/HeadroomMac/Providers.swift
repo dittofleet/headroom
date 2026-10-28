@@ -26,7 +26,7 @@ public enum LoginPreferences {
     /// CLI credentials are only read, never refreshed and written back.
     /// While they are expired, the numbers wait for the CLI to refresh them.
     public static var passiveMode: Bool {
-        get { defaults.bool(forKey: "passiveMode") }
+        get { defaults.object(forKey: "passiveMode") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "passiveMode") }
     }
 }

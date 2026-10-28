@@ -118,20 +118,19 @@ credentials your CLIs already have:
 Tokens are only sent to the provider they belong to.
 
 Claude Code's token lasts a few hours and is normally renewed by Claude
-Code itself, so on a Mac where Claude Code rarely runs it would sit
-expired. When that happens headroom renews it the same way Claude Code
-does: the refresh token goes to the same endpoint, and the new tokens are
-stored back in the keychain item (or `~/.claude/.credentials.json`) in the
-same shape, so Claude Code simply picks them up. It takes Claude Code's
-own refresh lock (`~/.claude/.oauth_refresh.lock`) while doing so, and
-leaves a live token alone unless the server rejects it, so the two do not
-rotate the refresh token out from under each other. When the refresh
-token itself has been revoked, the menu says to sign in again with
-`claude login`.
+Code itself. By default headroom only reads it, so while it is expired the
+numbers wait for Claude Code to refresh it.
 
-**Passive mode** in Settings stops that: headroom then only reads Claude
-Code's credentials, and while they are expired the numbers wait for
-Claude Code to refresh them.
+On a Mac where Claude Code rarely runs, the token would sit expired, so
+you can turn off **Passive mode** in Settings. Headroom then renews it the
+same way Claude Code does: the refresh token goes to the same endpoint,
+and the new tokens are stored back in the keychain item (or
+`~/.claude/.credentials.json`) in the same shape, so Claude Code simply
+picks them up. It takes Claude Code's own refresh lock
+(`~/.claude/.oauth_refresh.lock`) while doing so, and leaves a live token
+alone unless the server rejects it, so the two do not rotate the refresh
+token out from under each other. When the refresh token itself has been
+revoked, the menu says to sign in again with `claude login`.
 
 Codex's token is only ever read. When it expires the menu says so, and the
 numbers come back the next time you use Codex.
