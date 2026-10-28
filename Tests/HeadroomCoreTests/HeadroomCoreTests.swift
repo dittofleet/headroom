@@ -260,6 +260,42 @@ private struct GatedProvider: Provider {
     #expect(engine.state(provider).snapshot == nil)
 }
 
+/// Counts its fetches, each of which takes a moment so that callers overlap.
+private struct CountingProvider: Provider {
+    var id = "counting", name = "Counting", glyph = "C"
+    let usageURL = URL(string: "https://example.com")!
+    let fetches = Counter()
+
+    func fetch() async -> Result<Snapshot, FetchFailure> {
+        await fetches.increment()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        return .success(Snapshot(limits: [], plan: nil, fetchedAt: Date()))
+    }
+
+    actor Counter {
+        private(set) var count = 0
+        func increment() { count += 1 }
+    }
+}
+
+/// The `headroom` command on Linux, called by several agents at once.
+@MainActor @Test func lockedRefreshesFetchOnceBetweenThem() async {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("headroom-test-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let file = dir.appendingPathComponent("state.json"), lock = dir.appendingPathComponent("counting.lock")
+    let provider = CountingProvider()
+    func call() async { await Engine(providers: [provider], cacheFile: file).refreshAndWait(lockedBy: lock) }
+
+    await withTaskGroup(of: Void.self) { group in
+        for _ in 0..<3 { group.addTask { await call() } }
+    }
+    #expect(await provider.fetches.count == 1)
+    #expect(Engine.savedStates(at: file)[provider.id]?.snapshot != nil)
+    // Until they are due, the saved numbers are all a call gets.
+    await call()
+    #expect(await provider.fetches.count == 1)
+}
+
 @MainActor @Test func engineHonorsCooldownsAndKeepsLastGoodData() {
     let provider = StubProvider()
     let engine = Engine(providers: [provider], cacheFile: nil)

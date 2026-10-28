@@ -1,9 +1,9 @@
 import Foundation
 
-enum Subprocess {
+package enum Subprocess {
     /// stdout of a short-lived command, or nil on failure or timeout.
     /// `input`, when given, is written to its stdin and then closed.
-    static func run(_ path: String, _ args: [String], input: Data? = nil, timeout: TimeInterval = 5) async -> Data? {
+    package static func run(_ path: String, _ args: [String], input: Data? = nil, timeout: TimeInterval = 5) async -> Data? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 let process = Process()

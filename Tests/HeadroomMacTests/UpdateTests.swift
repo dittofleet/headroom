@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import HeadroomBorrow
 @testable import HeadroomMac
 
 @Test func versionsParseAndOrder() throws {

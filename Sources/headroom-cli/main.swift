@@ -1,16 +1,29 @@
 import Foundation
 import HeadroomCore
-import HeadroomMac
+import HeadroomBorrow
 
-// Shipped inside Headroom.app and linked onto the PATH as `headroom`. It
-// only reads what the running app last saved: fetching from here would
-// spend the same small quota the app depends on.
+// On a Mac, shipped inside Headroom.app and linked onto the PATH as
+// `headroom`. It only reads what the running app last saved: fetching from
+// here would spend the same small quota the app depends on.
+//
+// On Linux there is no app, so it fetches itself, on the app's schedule:
+// only when the saved numbers are due, and once for all the calls waiting.
+
+#if os(Linux)
+let freshness = """
+    Fetches them when the saved ones are over 5 minutes old.
+    """
+#else
+let freshness = """
+    Headroom refreshes every 5 minutes while it runs. This never fetches.
+    """
+#endif
 
 let usage = """
     usage: headroom \(allProviders.map(\.id).joined(separator: "|")) [--json]
 
     Prints your usage limits for one provider as Headroom last saw them.
-    Headroom refreshes every 5 minutes while it runs. This never fetches.
+    \(freshness)
 
       --json     machine-readable output, for agents and scripts
       --version  print the version
@@ -46,9 +59,15 @@ guard names.count == 1, let provider = allProviders.first(where: { $0.id == name
     fail(names.isEmpty ? "which provider?\n\n\(usage)" : "unknown provider \(names.joined(separator: " "))\n\n\(usage)", code: 2)
 }
 
-guard let cacheFile = Engine.defaultCacheFile, FileManager.default.fileExists(atPath: cacheFile.path) else {
+guard let cacheFile = Engine.defaultCacheFile else { fail("no cache folder") }
+#if os(Linux)
+let lock = cacheFile.deletingLastPathComponent().appendingPathComponent("\(provider.id).lock")
+await Engine(providers: [provider], cacheFile: cacheFile).refreshAndWait(lockedBy: lock)
+#else
+guard FileManager.default.fileExists(atPath: cacheFile.path) else {
     fail("no usage numbers yet. Open Headroom, which saves them for this command.")
 }
+#endif
 
 let now = Date()
 let report = UsageReport(Engine.savedStates(at: cacheFile)[provider.id] ?? ProviderState(), now: now)

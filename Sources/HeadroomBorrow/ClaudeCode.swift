@@ -50,9 +50,14 @@ extension ClaudeProvider {
 
     static let keychainService = "Claude Code-credentials"
     static let configDirectory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+    #if os(macOS)
     static let sources: [Credentials.Source] = [
         .keychain(account: NSUserName()), .keychain(account: nil), .file(configDirectory.appendingPathComponent(".credentials.json")),
     ]
+    #else
+    // Claude Code uses the keychain only on a Mac.
+    static let sources: [Credentials.Source] = [.file(configDirectory.appendingPathComponent(".credentials.json"))]
+    #endif
 
     /// Stops at the first source with a live token, so the usual case is a
     /// single subprocess. An expired one is kept only to renew or report.

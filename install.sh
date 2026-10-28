@@ -2,13 +2,32 @@
 # Installs the latest release into /Applications. Given a path to a
 # Headroom.app, installs that instead (how `make install` installs a build
 # from source). To uninstall, quit Headroom and move it to the Trash.
+#
+# On Linux, installs the `headroom` command into ~/.local/bin. To
+# uninstall, delete it.
 set -eu
+
+RELEASE="https://github.com/dittofleet/headroom/releases/latest/download"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+if [ "$(uname -s)" = "Linux" ]; then
+  DEST="${HEADROOM_INSTALL_DIR:-$HOME/.local/bin}"
+  URL="$RELEASE/headroom-linux-$(uname -m)"
+  echo "Downloading $URL..." >&2
+  curl -fsSL "$URL" -o "$TMP/headroom"
+  chmod +x "$TMP/headroom"
+  mkdir -p "$DEST"
+  mv "$TMP/headroom" "$DEST/headroom"
+  echo "Installed $DEST/headroom." >&2
+  exit 0
+fi
 
 DEST="${HEADROOM_INSTALL_DIR:-/Applications}"
 APP="$DEST/Headroom.app"
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  echo "headroom is a macOS menu bar app, got: $(uname -s)" >&2
+  echo "headroom runs on macOS and Linux, got: $(uname -s)" >&2
   exit 1
 fi
 if [ ! -w "$DEST" ]; then
@@ -16,13 +35,10 @@ if [ ! -w "$DEST" ]; then
   exit 1
 fi
 
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-
 if [ $# -gt 0 ]; then
   ditto "$1" "$TMP/Headroom.app"
 else
-  URL="https://github.com/dittofleet/headroom/releases/latest/download/Headroom.zip"
+  URL="$RELEASE/Headroom.zip"
   echo "Downloading $URL..." >&2
   curl -fsSL "$URL" -o "$TMP/Headroom.zip"
   ditto -x -k "$TMP/Headroom.zip" "$TMP"

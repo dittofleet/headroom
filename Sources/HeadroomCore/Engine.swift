@@ -114,6 +114,24 @@ public final class Engine {
         return started
     }
 
+    /// `refreshAndWait` for processes that run only when asked, any number
+    /// at once, such as the `headroom` command where no app keeps the
+    /// numbers fresh. One of them fetches under `lock` and the others wait
+    /// for what it saves, so they fetch no more often than one app would.
+    public func refreshAndWait(lockedBy lock: URL) async {
+        while providers.contains(where: { isDue($0, manual: false, now: Date()) }) {
+            if DirectoryLock.take(lock) {
+                defer { DirectoryLock.release(lock) }
+                // Another process may have fetched between the check and the lock.
+                reload()
+                await refreshAndWait()
+                return
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            reload()
+        }
+    }
+
     /// Starts whatever is due, and returns whether there was any.
     @discardableResult
     private func start(manual: Bool, now: Date) -> Bool {

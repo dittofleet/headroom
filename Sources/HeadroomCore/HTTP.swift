@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 package enum HTTP {
     private static let session: URLSession = {
@@ -95,7 +98,11 @@ package enum Parse {
 
     package static func number(_ value: Any?) -> Double? {
         // NSNumber also wraps JSON booleans; a bool is never a percentage.
+        #if canImport(Darwin)
         guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        #else
+        guard !(value is Bool), let number = value as? NSNumber else { return nil }
+        #endif
         return number.doubleValue
     }
 
