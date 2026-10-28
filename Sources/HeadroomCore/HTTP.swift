@@ -8,7 +8,10 @@ package enum HTTP {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
+        // Already so on Linux, where it can't be set.
+        #if canImport(Darwin)
         config.waitsForConnectivity = false
+        #endif
         return URLSession(configuration: config, delegate: NoRedirects(), delegateQueue: nil)
     }()
 
