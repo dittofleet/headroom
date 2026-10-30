@@ -48,3 +48,14 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(creds.token == "t" && creds.accountID == "a")
     #expect(CodexProvider.parseCredentials(Data(#"{"OPENAI_API_KEY": "k", "tokens": null}"#.utf8)) == nil)
 }
+
+@Test func claudeKeychainWriteSwitchesToArgumentsPastSecurityLineLimit() throws {
+    let small = TokenRenewer.keychainWrite(Data(repeating: 0x41, count: 1900), account: "me")
+    #expect(small.args == ["-i"])
+    let line = try #require(small.input.flatMap { String(data: $0, encoding: .utf8) })
+    #expect(line.utf8.count <= 4032 && line.hasPrefix("add-generic-password -U -a \"me\" -s ") && line.hasSuffix("\"\n"))
+
+    let large = TokenRenewer.keychainWrite(Data(repeating: 0x41, count: 2000), account: "me")
+    #expect(large.input == nil)
+    #expect(large.args == ["add-generic-password", "-U", "-a", "me", "-s", ClaudeProvider.keychainService, "-X", String(repeating: "41", count: 2000)])
+}
