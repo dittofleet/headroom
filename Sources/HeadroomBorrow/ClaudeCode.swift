@@ -214,9 +214,10 @@ actor TokenRenewer {
         }
 
         // From here the old token may already be revoked, so the write is
-        // what keeps Claude Code signed in. Report loudly if it fails.
+        // what keeps Claude Code signed in. Report loudly if it fails, or
+        // if what reads back is not what was written.
         guard await Self.store(document, to: creds.source),
-              let renewed = ClaudeProvider.parseCredentials(document, source: creds.source)
+              let renewed = await ClaudeProvider.read(creds.source), renewed.token == renewal.token
         else {
             return .failure(FetchFailure("Renewed token could not be saved, \(ClaudeProvider.signInAdvice)"))
         }
@@ -237,14 +238,22 @@ actor TokenRenewer {
             // Owner-only from the first byte, as Claude Code writes it.
             return FileManager.default.createFile(atPath: url.path, contents: document, attributes: [.posixPermissions: 0o600])
         case .keychain(let account):
-            // The same command Claude Code runs, fed over stdin so the token
-            // never shows in the process list. `-U` updates the existing
-            // item in place, keeping the access list that lets
-            // /usr/bin/security read it without a prompt.
-            let hex = document.map { String(format: "%02x", $0) }.joined()
-            let scope = account.map { "-a \"\($0)\" " } ?? ""
-            let command = "add-generic-password -U \(scope)-s \"\(ClaudeProvider.keychainService)\" -X \"\(hex)\"\n"
-            return await Subprocess.run("/usr/bin/security", ["-i"], input: Data(command.utf8)) != nil
+            let (args, input) = keychainWrite(document, account: account)
+            return await Subprocess.run("/usr/bin/security", args, input: input) != nil
         }
+    }
+
+    /// The same command Claude Code runs. `-U` updates the existing item in
+    /// place, keeping the access list that lets /usr/bin/security read it
+    /// without a prompt. Fed over stdin so the token never shows in the
+    /// process list, unless the line is too long for `security -i`, which
+    /// reads it into a 4096-byte buffer. Past 4032 bytes it goes as
+    /// arguments, the same cutoff Claude Code uses.
+    static func keychainWrite(_ document: Data, account: String?) -> (args: [String], input: Data?) {
+        let hex = document.map { String(format: "%02x", $0) }.joined()
+        let service = ClaudeProvider.keychainService
+        let line = "add-generic-password -U \(account.map { "-a \"\($0)\" " } ?? "")-s \"\(service)\" -X \"\(hex)\"\n"
+        if line.utf8.count <= 4032 { return (["-i"], Data(line.utf8)) }
+        return (["add-generic-password", "-U"] + (account.map { ["-a", $0] } ?? []) + ["-s", service, "-X", hex], nil)
     }
 }
