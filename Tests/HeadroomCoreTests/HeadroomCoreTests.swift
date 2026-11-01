@@ -57,10 +57,9 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 }
 
 @Test func planNames() {
-    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_20x") == "Max 20x")
-    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_40x") == "Max 40x")
+    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_20x") == "Ultra")
+    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_5x") == "Max")
     #expect(ClaudeProvider.planName("max", tier: nil) == "Max")
-    #expect(ClaudeProvider.planName("max", tier: "default_claude_max_20x_v2") == "Max")
     #expect(ClaudeProvider.planName("team", tier: "default_claude_max_5x") == "Team Premium")
     #expect(ClaudeProvider.planName("enterprise", tier: "whatever") == "Enterprise")
     #expect(ClaudeProvider.planName("", tier: nil) == nil)
@@ -76,7 +75,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     func plan(_ organization: String) -> String? {
         ClaudeProvider.parseProfile(Data(#"{"organization": \#(organization)}"#.utf8))
     }
-    #expect(plan(#"{"organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}"#) == "Max 20x")
+    #expect(plan(#"{"organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}"#) == "Ultra")
     #expect(plan(#"{"organization_type": "claude_pro", "rate_limit_tier": "default_claude_ai"}"#) == "Pro")
     #expect(plan(#"{"organization_type": "claude_team", "rate_limit_tier": "default_claude_max_5x"}"#) == "Team Premium")
     #expect(plan(#"{"organization_type": "claude_enterprise"}"#) == "Enterprise")

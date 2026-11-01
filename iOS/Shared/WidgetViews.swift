@@ -53,7 +53,7 @@ struct UsageEntry: TimelineEntry {
             limit(.session, "Session", 42, resetsIn: 2 * 3600, window: 5 * 3600),
             limit(.weekly, "Weekly", 30, resetsIn: 3 * 86400, window: 7 * 86400),
             limit(.weekly, "Fable Weekly", 63, resetsIn: 3 * 86400, window: 7 * 86400),
-        ], plan: "Max 20x", fetchedAt: now)
+        ], plan: "Ultra", fetchedAt: now)
         let codex = Snapshot(limits: [
             limit(.session, "Session", 13, resetsIn: 4 * 3600, window: 5 * 3600),
             limit(.weekly, "Weekly", 78, resetsIn: 86400, window: 7 * 86400),
