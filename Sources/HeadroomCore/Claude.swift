@@ -66,15 +66,12 @@ public struct ClaudeProvider: Sendable {
 
     // MARK: Plan
 
-    /// Max comes in sizes, and a Team seat can be a premium one. The rate
-    /// limit tier is what tells them apart.
+    /// Ultra is still a "max" subscription, and a Team seat can be a premium
+    /// one. The rate limit tier is what tells them apart.
     public static func planName(_ subscription: String?, tier: String?) -> String? {
         guard let subscription, !subscription.isEmpty else { return nil }
         switch (subscription, tier) {
-        case ("max", let tier?):
-            // "default_claude_max_20x" is "Max 20x".
-            let size = tier.split(separator: "_").last ?? ""
-            return size.count > 1 && size.hasSuffix("x") && size.dropLast().allSatisfy(\.isNumber) ? "Max \(size)" : "Max"
+        case ("max", "default_claude_max_20x"): return "Ultra"
         case ("team", "default_claude_max_5x"): return "Team Premium"
         default: return Format.title(subscription)
         }

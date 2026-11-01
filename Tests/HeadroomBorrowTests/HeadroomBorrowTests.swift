@@ -34,7 +34,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 
     // The renewed credentials read back like the originals did.
     let creds = try #require(ClaudeProvider.parseCredentials(document, source: .keychain(account: "me")))
-    #expect(creds.token == "new" && creds.refreshToken == "r2" && creds.expiresAt == now && creds.plan == "Max 5x")
+    #expect(creds.token == "new" && creds.refreshToken == "r2" && creds.expiresAt == now && creds.plan == "Max")
 
     // Without a new refresh token, the stored one stays.
     let kept = try #require(ClaudeProvider.renewedDocument(stored, with: ClaudeProvider.Renewal(token: "n", refreshToken: nil, expiresAt: now, refreshTokenExpiresAt: nil, scopes: [])))
