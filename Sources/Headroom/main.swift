@@ -20,11 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Only an installed app manages the link: a build run from a checkout
     /// would point it into .build.
     private let commandLineTool: CLILink? = {
-        let app = InstalledApp.url
-        guard app.pathExtension == "app" else { return nil }
-        let binary = app.appendingPathComponent(CLILink.pathInApp)
-        guard FileManager.default.fileExists(atPath: binary.path) else { return nil }
-        return CLILink(binary: binary, binDir: CLILink.userBinDir)
+        guard InstalledApp.url.pathExtension == "app" else { return nil }
+        let tool = CLILink(app: InstalledApp.url, binDir: CLILink.userBinDir)
+        return FileManager.default.fileExists(atPath: tool.binary.path) ? tool : nil
     }()
 
     init(engine: Engine) {

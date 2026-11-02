@@ -21,15 +21,14 @@ public struct CLILink: Sendable {
         public var errorDescription: String?
     }
 
-    /// Where the CLI sits inside the app bundle.
-    public static let pathInApp = "Contents/MacOS/headroom-cli"
+    private static let pathInApp = "Contents/MacOS/headroom-cli"
 
     /// The CLI this copy of the app ships.
     public let binary: URL
     public let link: URL
 
-    public init(binary: URL, binDir: URL) {
-        self.binary = binary
+    public init(app: URL, binDir: URL) {
+        self.binary = app.appendingPathComponent(Self.pathInApp)
         self.link = binDir.appendingPathComponent("headroom")
     }
 

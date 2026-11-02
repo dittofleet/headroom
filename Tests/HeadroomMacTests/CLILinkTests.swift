@@ -6,10 +6,9 @@ import Testing
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: dir) }
     let bin = dir.appendingPathComponent("bin")
-    let binary = dir.appendingPathComponent("New/Headroom.app/Contents/MacOS/headroom-cli")
-    try FileManager.default.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data().write(to: binary)
-    let link = CLILink(binary: binary, binDir: bin)
+    let link = CLILink(app: dir.appendingPathComponent("New/Headroom.app"), binDir: bin)
+    try FileManager.default.createDirectory(at: link.binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: link.binary)
 
     #expect(link.state == .missing)
     try link.install()
