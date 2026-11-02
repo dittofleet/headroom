@@ -17,7 +17,7 @@ final class UpdateController {
 
     private let current: Version?
     private let updater: Updater?
-    private let appURL = Bundle.main.bundleURL
+    private let appURL = InstalledApp.url
     private var busy = false
     /// Installed on disk and waiting for a restart.
     private(set) var installed: Version?

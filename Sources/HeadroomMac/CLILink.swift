@@ -21,14 +21,14 @@ public struct CLILink: Sendable {
         public var errorDescription: String?
     }
 
-    public static let binaryName = "headroom-cli"
+    private static let pathInApp = "Contents/MacOS/headroom-cli"
 
     /// The CLI this copy of the app ships.
     public let binary: URL
     public let link: URL
 
-    public init(binary: URL, binDir: URL) {
-        self.binary = binary
+    public init(app: URL, binDir: URL) {
+        self.binary = app.appendingPathComponent(Self.pathInApp)
         self.link = binDir.appendingPathComponent("headroom")
     }
 
@@ -49,18 +49,13 @@ public struct CLILink: Sendable {
         // there keeps its link, and a headroom-cli outside an app bundle was
         // put there by hand.
         let gone = !files.fileExists(atPath: target)
-        return gone && target.hasSuffix(".app/Contents/MacOS/\(Self.binaryName)") ? .stale : .foreign
+        return gone && target.hasSuffix(".app/\(Self.pathInApp)") ? .stale : .foreign
     }
 
     /// `replacing` is the user's consent to take over a foreign file.
     public func install(replacing: Bool = false) throws {
         if state == .foreign && !replacing {
             throw Failure(errorDescription: "\(link.path) already exists and wasn't created by Headroom.")
-        }
-        // Gatekeeper runs a quarantined app from a random read-only path
-        // that goes away with it, so a link there would break at once.
-        if binary.path.contains("/AppTranslocation/") {
-            throw Failure(errorDescription: "macOS is running Headroom from a temporary location. Move it to Applications, open it again, and retry.")
         }
         try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Linked under a temporary name and renamed over the old one, so a
