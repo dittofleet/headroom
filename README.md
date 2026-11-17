@@ -12,7 +12,7 @@ such as Claude's weekly or a model-scoped weekly limit, and every window
 is still listed in the menu. "Stacked" splits the bar in two: the session on
 top, and below it the weekly limit, or a model's own weekly such as
 Claude's Fable weekly, dotted, when it is ahead of the general one. Without
-a session, the weekly goes on top and the model's weekly below.
+a session, the weekly goes on top and the model's weekly below, undotted.
 Rows turn orange at 75% and red at 90%.
 "Show numbers in menu bar" drops the percentages and leaves just the bars,
 for a narrower icon.

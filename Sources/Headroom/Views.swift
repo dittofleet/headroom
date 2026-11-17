@@ -30,7 +30,7 @@ enum StatusIcon {
     struct Lane: Equatable {
         var label: String
         var percent: Double
-        /// A model's own weekly, like Fable's.
+        /// A model's own weekly, like Fable's, in place of the general one.
         var dotted: Bool
     }
 
@@ -49,12 +49,12 @@ enum StatusIcon {
             let snapshot = engine.state(provider).snapshot
             let choice = chrome.menuBarLimits[provider.id]
             let headline = snapshot?.headline(at: now, preferring: choice)
-            let weekly = choice == stackedChoice ? snapshot?.stacked(at: now)?.bottom : nil
+            let stack = choice == stackedChoice ? snapshot?.stacked(at: now) : nil
             return Row(
                 glyph: provider.glyph,
                 label: headline?.label,
                 percent: headline?.percent(at: now),
-                weekly: weekly.map { Lane(label: $0.label, percent: $0.percent(at: now), dotted: $0.isScoped) },
+                weekly: stack.map { Lane(label: $0.bottom.label, percent: $0.bottom.percent(at: now), dotted: $0.replacesWeekly) },
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
