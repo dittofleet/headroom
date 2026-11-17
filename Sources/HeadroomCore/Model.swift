@@ -35,6 +35,9 @@ public struct Limit: Codable, Equatable, Sendable {
         guard let resetsAt, let windowSeconds, windowSeconds > 0, resetsAt > now else { return nil }
         return min(max(1 - resetsAt.timeIntervalSince(now) / windowSeconds, 0), 1)
     }
+
+    /// A weekly limit for one model, like Fable's, rather than the general one.
+    public var isScoped: Bool { kind == .weekly && label != "Weekly" }
 }
 
 public struct Snapshot: Codable, Equatable, Sendable {
@@ -65,37 +68,51 @@ public struct Snapshot: Codable, Equatable, Sendable {
 
     /// The one number worth showing in the menu bar: the window with the
     /// chosen label, else the session window. Falls back to the fullest
-    /// window when the provider has neither.
+    /// window when the provider has neither. Stacked leads with its top lane.
     public func headline(at now: Date, preferring label: String? = nil) -> Limit? {
-        limits.first { $0.label == label }
+        if label == stackedChoice, let top = stacked(at: now)?.top { return top }
+        return limits.first { $0.label == label }
             ?? limits.first { $0.kind == .session }
             ?? limits.max { $0.percent(at: now) < $1.percent(at: now) }
     }
 
-    /// The weekly limit a stacked menu bar row shows under its headline:
-    /// the fullest one other than the headline itself.
-    public func stackedWeekly(at now: Date) -> Limit? {
-        let front = headline(at: now)
-        return limits.filter { $0.kind == .weekly && $0 != front }.max { $0.percent(at: now) < $1.percent(at: now) }
+    /// The weekly limit for every model.
+    public var generalWeekly: Limit? {
+        limits.first { $0.kind == .weekly && !$0.isScoped }
+    }
+
+    /// The two lanes of a Stacked row. With a session: the session over the
+    /// general weekly, or over a scoped weekly like Fable's when that one is
+    /// fuller. Without: the general weekly over the fullest scoped one.
+    public func stacked(at now: Date) -> (top: Limit, bottom: Limit)? {
+        let general = generalWeekly
+        let scoped = limits.filter(\.isScoped).max { $0.percent(at: now) < $1.percent(at: now) }
+        if let session = limits.first(where: { $0.kind == .session }) {
+            // On a tie the general weekly stays.
+            let bottom = [general, scoped].compactMap { $0 }.max { $0.percent(at: now) < $1.percent(at: now) }
+            return bottom.map { (session, $0) }
+        }
+        guard let general, let scoped else { return nil }
+        return (general, scoped)
     }
 
     /// What a provider could lead with: each limit, plus `stackedChoice`
     /// when there is something to stack.
     public func choices(at now: Date) -> [String] {
-        limits.map(\.label) + (stackedWeekly(at: now) == nil ? [] : [stackedChoice])
+        limits.map(\.label) + (stacked(at: now) == nil ? [] : [stackedChoice])
     }
 
     /// What a stored choice shows as: `stackedChoice`, or the label of the
-    /// limit leading. A Stacked choice with nothing left to stack shows the
-    /// plain session.
+    /// limit leading. A Stacked choice with nothing to stack shows the plain
+    /// session.
     public func shownChoice(_ choice: String?, at now: Date) -> String? {
-        if choice == stackedChoice, stackedWeekly(at: now) != nil { return stackedChoice }
+        if choice == stackedChoice, stacked(at: now) != nil { return stackedChoice }
         return headline(at: now, preferring: choice)?.label
     }
 }
 
-/// The choice of what a provider leads with that shows the session with its
-/// fullest weekly limit under it, rather than a single limit. Stored in place of
+/// The choice of what a provider leads with that shows two limits, one over
+/// the other (see `Snapshot.stacked`), rather than a single limit. Stored in place of
 /// a limit's label, on the Mac for the menu bar and on iOS for the widgets.
 public let stackedChoice = "Stacked"
 

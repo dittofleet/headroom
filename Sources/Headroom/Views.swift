@@ -30,6 +30,8 @@ enum StatusIcon {
     struct Lane: Equatable {
         var label: String
         var percent: Double
+        /// A model's own weekly, like Fable's.
+        var dotted: Bool
     }
 
     /// Everything the icon is drawn from. Equal specs draw the same image.
@@ -47,12 +49,12 @@ enum StatusIcon {
             let snapshot = engine.state(provider).snapshot
             let choice = chrome.menuBarLimits[provider.id]
             let headline = snapshot?.headline(at: now, preferring: choice)
-            let weekly = choice == stackedChoice ? snapshot?.stackedWeekly(at: now) : nil
+            let weekly = choice == stackedChoice ? snapshot?.stacked(at: now)?.bottom : nil
             return Row(
                 glyph: provider.glyph,
                 label: headline?.label,
                 percent: headline?.percent(at: now),
-                weekly: weekly.map { Lane(label: $0.label, percent: $0.percent(at: now)) },
+                weekly: weekly.map { Lane(label: $0.label, percent: $0.percent(at: now), dotted: $0.isScoped) },
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
@@ -103,15 +105,15 @@ enum StatusIcon {
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
                 let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
-                func drawLane(_ lane: NSRect, percent: Double, color: NSColor) {
-                    drawBar(lane, percent: percent, trackColor: color.withAlphaComponent(0.25 * alpha), fillColor: color.withAlphaComponent(alpha), minFill: 2)
+                func drawLane(_ lane: NSRect, percent: Double, color: NSColor, dotted: Bool = false) {
+                    drawBar(lane, percent: percent, trackColor: color.withAlphaComponent(0.25 * alpha), fillColor: color.withAlphaComponent(alpha), minFill: 2, dotted: dotted)
                 }
                 if let weekly = row.weekly {
-                    // Stacked: the session on the top half, the weekly
+                    // Stacked: the top limit on the top half, the weekly
                     // limit in a thinner lane below.
-                    let sessionHeight = track.height / 2
-                    drawLane(NSRect(x: track.minX, y: track.maxY - sessionHeight, width: track.width, height: sessionHeight), percent: row.percent ?? 0, color: color)
-                    drawLane(NSRect(x: track.minX, y: track.minY, width: track.width, height: sessionHeight - 1), percent: weekly.percent, color: ink(Level(percent: weekly.percent)))
+                    let laneHeight = track.height / 2
+                    drawLane(NSRect(x: track.minX, y: track.maxY - laneHeight, width: track.width, height: laneHeight), percent: row.percent ?? 0, color: color)
+                    drawLane(NSRect(x: track.minX, y: track.minY, width: track.width, height: laneHeight - 1), percent: weekly.percent, color: ink(Level(percent: weekly.percent)), dotted: weekly.dotted)
                 } else {
                     drawLane(track, percent: row.percent ?? 0, color: color)
                 }
@@ -134,8 +136,8 @@ enum StatusIcon {
 }
 
 /// A rounded track and its fill, which never shrinks below a visible nub
-/// once anything is used.
-private func drawBar(_ track: NSRect, percent: Double, trackColor: NSColor, fillColor: NSColor, minFill: CGFloat? = nil) {
+/// once anything is used. A dotted fill is a row of short dashes.
+private func drawBar(_ track: NSRect, percent: Double, trackColor: NSColor, fillColor: NSColor, minFill: CGFloat? = nil, dotted: Bool = false) {
     let radius = track.height / 2
     trackColor.setFill()
     NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
@@ -143,7 +145,14 @@ private func drawBar(_ track: NSRect, percent: Double, trackColor: NSColor, fill
     var fill = track
     fill.size.width = max(track.width * percent / 100, minFill ?? track.height)
     fillColor.setFill()
-    NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
+    if dotted {
+        for x in stride(from: fill.minX, to: fill.maxX, by: 3) {
+            let dash = NSRect(x: x, y: fill.minY, width: min(2, fill.maxX - x), height: fill.height)
+            NSBezierPath(roundedRect: dash, xRadius: radius, yRadius: radius).fill()
+        }
+    } else {
+        NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
+    }
 }
 
 enum Preferences {

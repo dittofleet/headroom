@@ -32,7 +32,7 @@ struct UsageEntry: TimelineEntry {
     /// The weekly limit under the headline, when Stacked is chosen.
     func stackedWeekly(_ row: Row) -> Limit? {
         guard settings.limits[row.id] == stackedChoice else { return nil }
-        return row.snapshot?.stackedWeekly(at: date)
+        return row.snapshot?.stacked(at: date)?.bottom
     }
 
     /// Every limit, the headline first.
@@ -98,7 +98,7 @@ extension UsageEntry {
         switch choice {
         case .asInApp: return headline(row)
         case .session: return limits.first { $0.kind == .session } ?? headline(row)
-        case .weekly: return limits.first { $0.kind == .weekly && $0.label == "Weekly" } ?? limits.first { $0.kind == .weekly }
+        case .weekly: return row.snapshot?.generalWeekly ?? limits.first { $0.kind == .weekly }
         }
     }
 }
@@ -158,7 +158,7 @@ struct UsageView: View {
                 let weekly = entry.stackedWeekly(row)
                 HStack(spacing: 6) {
                     Text(row.glyph).font(.caption.weight(.bold)).frame(width: glyphWidth, alignment: .leading)
-                    // Stacked: the session, and the weekly limit in a
+                    // Stacked: the headline, and the weekly limit in a
                     // thinner lane under it, like the Mac menu bar.
                     VStack(spacing: 1) {
                         UsageBar(
@@ -168,7 +168,7 @@ struct UsageView: View {
                             height: weekly == nil ? 5 : 3.5
                         )
                         if let weekly {
-                            UsageBar(percent: weekly.percent(at: entry.date), tint: .primary, height: 2.5)
+                            UsageBar(percent: weekly.percent(at: entry.date), tint: .primary, height: 2.5, dotted: weekly.isScoped)
                         }
                     }
                     .widgetAccentable()
