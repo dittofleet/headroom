@@ -83,17 +83,18 @@ public struct Snapshot: Codable, Equatable, Sendable {
 
     /// The two lanes of a Stacked row. With a session: the session over the
     /// general weekly, or over a scoped weekly like Fable's when that one is
-    /// fuller. Without: the general weekly over the fullest scoped one.
-    public func stacked(at now: Date) -> (top: Limit, bottom: Limit)? {
+    /// fuller, which `replacesWeekly` flags. Without: the general weekly over
+    /// the fullest scoped one.
+    public func stacked(at now: Date) -> (top: Limit, bottom: Limit, replacesWeekly: Bool)? {
         let general = generalWeekly
         let scoped = limits.filter(\.isScoped).max { $0.percent(at: now) < $1.percent(at: now) }
         if let session = limits.first(where: { $0.kind == .session }) {
             // On a tie the general weekly stays.
             let bottom = [general, scoped].compactMap { $0 }.max { $0.percent(at: now) < $1.percent(at: now) }
-            return bottom.map { (session, $0) }
+            return bottom.map { (session, $0, $0.isScoped) }
         }
         guard let general, let scoped else { return nil }
-        return (general, scoped)
+        return (general, scoped, false)
     }
 
     /// What a provider could lead with: each limit, plus `stackedChoice`

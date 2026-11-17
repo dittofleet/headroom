@@ -29,10 +29,11 @@ struct UsageEntry: TimelineEntry {
         row.snapshot?.headline(at: date, preferring: settings.limits[row.id])
     }
 
-    /// The weekly limit under the headline, when Stacked is chosen.
-    func stackedWeekly(_ row: Row) -> Limit? {
+    /// The lanes of the headline and the weekly limit under it, when
+    /// Stacked is chosen.
+    func stacked(_ row: Row) -> (top: Limit, bottom: Limit, replacesWeekly: Bool)? {
         guard settings.limits[row.id] == stackedChoice else { return nil }
-        return row.snapshot?.stacked(at: date)?.bottom
+        return row.snapshot?.stacked(at: date)
     }
 
     /// Every limit, the headline first.
@@ -155,7 +156,7 @@ struct UsageView: View {
         return VStack(alignment: .leading, spacing: entry.rows.count > 2 ? 2 : 6) {
             ForEach(entry.rows, id: \.id) { row in
                 let headline = entry.headline(row)
-                let weekly = entry.stackedWeekly(row)
+                let stack = entry.stacked(row)
                 HStack(spacing: 6) {
                     Text(row.glyph).font(.caption.weight(.bold)).frame(width: glyphWidth, alignment: .leading)
                     // Stacked: the headline, and the weekly limit in a
@@ -165,10 +166,10 @@ struct UsageView: View {
                             percent: headline?.percent(at: entry.date) ?? 0,
                             pace: entry.settings.showPace ? headline?.elapsedFraction(at: entry.date) : nil,
                             tint: .primary,
-                            height: weekly == nil ? 5 : 3.5
+                            height: stack == nil ? 5 : 3.5
                         )
-                        if let weekly {
-                            UsageBar(percent: weekly.percent(at: entry.date), tint: .primary, height: 2.5, dotted: weekly.isScoped)
+                        if let stack {
+                            UsageBar(percent: stack.bottom.percent(at: entry.date), tint: .primary, height: 2.5, dotted: stack.replacesWeekly)
                         }
                     }
                     .widgetAccentable()

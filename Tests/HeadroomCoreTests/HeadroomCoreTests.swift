@@ -151,11 +151,18 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     func lanes(_ limits: [Limit]) -> [Limit]? {
         Snapshot(limits: limits, plan: nil, fetchedAt: now).stacked(at: now).map { [$0.top, $0.bottom] }
     }
+    func dotted(_ limits: [Limit]) -> Bool? {
+        Snapshot(limits: limits, plan: nil, fetchedAt: now).stacked(at: now)?.replacesWeekly
+    }
     // The session over the weekly, unless Fable's is fuller.
     #expect(lanes([session, weekly, calmFable]) == [session, weekly])
     #expect(lanes([session, weekly, tiedFable]) == [session, weekly])
     #expect(lanes([session, weekly, fable]) == [session, fable])
     #expect(lanes([session, fable]) == [session, fable])
+    // Dotted only where Fable's takes the weekly's place.
+    #expect(dotted([session, weekly, calmFable]) == false)
+    #expect(dotted([session, weekly, fable]) == true)
+    #expect(dotted([weekly, fable]) == false)
     // Without a session: the weekly over Fable's, however full each is.
     #expect(lanes([weekly, fable]) == [weekly, fable])
     #expect(lanes([weekly, calmFable]) == [weekly, calmFable])
