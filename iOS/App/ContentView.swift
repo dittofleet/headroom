@@ -58,7 +58,7 @@ struct ContentView: View {
         } header: {
             Text("Widgets")
         } footer: {
-            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the fullest weekly limit under it.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
+            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the weekly limit under it, or a model's own weekly, dotted, when that one is fuller.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
         }
     }
 

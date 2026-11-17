@@ -142,21 +142,29 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(noSession.headline(at: now, preferring: "Opus Weekly") == scoped)
 }
 
-@Test func stackedWeeklyIsTheFullestOtherWeekly() {
+@Test func stackedLanes() {
     let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
     let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
-    let scoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
-    let all = Snapshot(limits: [session, weekly, scoped], plan: nil, fetchedAt: now)
-    #expect(all.stackedWeekly(at: now) == scoped)
-    // The fullest wins, wherever it is listed.
-    let generalFuller = Limit(kind: .weekly, label: "Weekly", percent: 90, resetsAt: nil, windowSeconds: nil)
-    let calmScoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 10, resetsAt: nil, windowSeconds: nil)
-    #expect(Snapshot(limits: [session, generalFuller, calmScoped], plan: nil, fetchedAt: now).stackedWeekly(at: now) == generalFuller)
-    // Without a session the fullest weekly leads rather than stacking.
-    let noSession = Snapshot(limits: [weekly, scoped], plan: nil, fetchedAt: now)
-    #expect(noSession.stackedWeekly(at: now) == weekly)
-    let sessionOnly = Snapshot(limits: [session], plan: nil, fetchedAt: now)
-    #expect(sessionOnly.stackedWeekly(at: now) == nil)
+    let fable = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
+    let calmFable = Limit(kind: .weekly, label: "Fable Weekly", percent: 10, resetsAt: nil, windowSeconds: nil)
+    let tiedFable = Limit(kind: .weekly, label: "Fable Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
+    func lanes(_ limits: [Limit]) -> [Limit]? {
+        Snapshot(limits: limits, plan: nil, fetchedAt: now).stacked(at: now).map { [$0.top, $0.bottom] }
+    }
+    // The session over the weekly, unless Fable's is fuller.
+    #expect(lanes([session, weekly, calmFable]) == [session, weekly])
+    #expect(lanes([session, weekly, tiedFable]) == [session, weekly])
+    #expect(lanes([session, weekly, fable]) == [session, fable])
+    #expect(lanes([session, fable]) == [session, fable])
+    // Without a session: the weekly over Fable's, however full each is.
+    #expect(lanes([weekly, fable]) == [weekly, fable])
+    #expect(lanes([weekly, calmFable]) == [weekly, calmFable])
+    let noSession = Snapshot(limits: [fable, weekly], plan: nil, fetchedAt: now)
+    #expect(noSession.headline(at: now, preferring: stackedChoice) == weekly)
+    // Nothing to stack.
+    #expect(lanes([session]) == nil)
+    #expect(lanes([weekly]) == nil)
+    #expect(Snapshot(limits: [session], plan: nil, fetchedAt: now).shownChoice(stackedChoice, at: now) == "Session")
 }
 
 @Test func formatting() {

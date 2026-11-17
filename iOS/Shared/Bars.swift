@@ -19,6 +19,8 @@ struct UsageBar: View {
     var tint: Color = .accentColor
     var dimmed = false
     var height: CGFloat = 5
+    /// For a model's own weekly, like Fable's.
+    var dotted = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -26,9 +28,17 @@ struct UsageBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.15))
                 // Never shrinks below a visible nub once anything is used.
-                Capsule()
-                    .frame(width: percent > 0 ? max(width * percent / 100, height) : 0)
-                    .foregroundStyle((Level(percent: percent).color ?? tint).opacity(dimmed ? 0.5 : 1))
+                let fillWidth = percent > 0 ? max(width * percent / 100, height) : 0
+                let fillColor = (Level(percent: percent).color ?? tint).opacity(dimmed ? 0.5 : 1)
+                if dotted {
+                    Path { path in
+                        path.move(to: CGPoint(x: 0, y: height / 2))
+                        path.addLine(to: CGPoint(x: fillWidth, y: height / 2))
+                    }
+                    .stroke(fillColor, style: StrokeStyle(lineWidth: height, dash: [2, 1]))
+                } else {
+                    Capsule().frame(width: fillWidth).foregroundStyle(fillColor)
+                }
             }
             .frame(width: width, height: height)
             // An overlay, so the tick, which is taller than the bar, can't

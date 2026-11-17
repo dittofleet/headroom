@@ -10,8 +10,9 @@ The menu bar shows one row per provider: how much of the current session
 window is used. Settings lets you pick a different window per provider,
 such as Claude's weekly or a model-scoped weekly limit, and every window
 is still listed in the menu. "Stacked" splits the bar in two: the session on
-top, and below it the fullest weekly limit, such as Claude's Fable weekly
-when it is ahead of the general one.
+top, and below it the weekly limit, or a model's own weekly such as
+Claude's Fable weekly, dotted, when it is ahead of the general one. Without
+a session, the weekly goes on top and the model's weekly below.
 Rows turn orange at 75% and red at 90%.
 "Show numbers in menu bar" drops the percentages and leaves just the bars,
 for a narrower icon.
