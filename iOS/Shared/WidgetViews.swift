@@ -151,14 +151,14 @@ struct UsageView: View {
     /// it leads with (Stacked adds a weekly limit under it),
     /// and the number unless numbers are off.
     private var rectangular: some View {
-        // Wider for numbered glyphs, and closer together past two accounts.
-        let glyphWidth: CGFloat = entry.rows.contains { $0.glyph.count > 1 } ? 18 : 12
-        return VStack(alignment: .leading, spacing: entry.rows.count > 2 ? 2 : 6) {
+        // A grid lines up the glyphs and numbers, and only the bars give
+        // way to larger text. Rows are closer together past two accounts.
+        Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: entry.rows.count > 2 ? 2 : 6) {
             ForEach(entry.rows, id: \.id) { row in
                 let headline = entry.headline(row)
                 let stack = entry.stacked(row)
-                HStack(spacing: 6) {
-                    Text(row.glyph).font(.caption.weight(.bold)).frame(width: glyphWidth, alignment: .leading)
+                GridRow {
+                    Text(row.glyph).font(.caption.weight(.bold)).fixedSize()
                     // Stacked: the headline, and the weekly limit in a
                     // thinner lane under it, like the Mac menu bar.
                     VStack(spacing: 1) {
@@ -177,7 +177,8 @@ struct UsageView: View {
                         Text(headline.map { Format.percent($0.percent(at: entry.date)) } ?? "–")
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
-                            .frame(width: 36, alignment: .trailing)
+                            .fixedSize()
+                            .gridColumnAlignment(.trailing)
                     }
                 }
             }
