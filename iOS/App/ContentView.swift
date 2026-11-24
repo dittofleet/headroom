@@ -59,7 +59,7 @@ struct ContentView: View {
         } header: {
             Text("Widgets")
         } footer: {
-            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the weekly limit under it, or a model's own weekly, dotted, when that one is fuller.\n\n\(model.settings.showRemaining ? "The tick on each bar is how much of the window is left. A fill short of it" : "The tick on each bar is how far through the window the clock is. A fill past it") means you are burning faster than the window refills.")
+            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the weekly limit under it, or a model's own weekly, dotted, when more of that one is used.\n\n\(model.settings.showRemaining ? "The tick on each bar is how much of the window is left. A fill short of it" : "The tick on each bar is how far through the window the clock is. A fill past it") means you are burning faster than the window refills.")
         }
     }
 
