@@ -84,9 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Reads out what the icon shows, a stacked weekly limit included.
     private func accessibilitySummary(_ spec: StatusIcon.Spec) -> String {
-        spec.rows.map { row in
-            let front = [row.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
-            let weekly = row.weekly.map { "\($0.label) \(Format.percent($0.percent))" }
+        func percent(_ used: Double) -> String {
+            Format.percent(used, remaining: spec.remaining) + (spec.remaining ? " left" : "")
+        }
+        return spec.rows.map { row in
+            let front = [row.name, row.label, row.percent.map(percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
+            let weekly = row.weekly.map { "\($0.label) \(percent($0.percent))" }
             return [front, weekly].compactMap { $0 }.joined(separator: ", ")
         }.joined(separator: ". ")
     }
@@ -99,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             canUpdate: updates.canUpdate,
             showPace: Preferences.showPace,
             showNumbers: Preferences.showNumbers,
+            showRemaining: Preferences.showRemaining,
             menuBarLimits: Preferences.menuBarLimits
         )
     }

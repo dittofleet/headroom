@@ -23,6 +23,11 @@ tick is how far through the window the clock is, so a fill past the tick
 means you are burning faster than the window refills. "Show pace marker" in
 Settings hides the ticks if you would rather not see them.
 
+"Show remaining instead of used" counts down instead: every number and bar
+shows how much of the limit is left, and the tick how much of the window
+is left, so a fill short of it means you are burning faster than the
+window refills.
+
 It does one thing and is simple about it: no dependencies and a short
 Settings window. It borrows the sessions Claude Code, Codex, and the
 Antigravity CLI already have, shows you the numbers, and otherwise stays

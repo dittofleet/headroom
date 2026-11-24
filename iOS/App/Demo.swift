@@ -135,7 +135,7 @@ enum Demo {
         write(lockScreen(entry), to: folder.appendingPathComponent("lock.png"))
         if isOn {
             var other = entry
-            other.settings = WidgetSettings(showNumbers: false, limits: ["claude-1": "Fable Weekly", "codex-1": "Weekly"])
+            other.settings = WidgetSettings(showNumbers: false, showRemaining: true, limits: ["claude-1": "Fable Weekly", "codex-1": "Weekly"])
             write(lockScreen(other), to: folder.appendingPathComponent("lock-alt.png"))
         }
     }
@@ -151,7 +151,7 @@ enum Demo {
     private static func caption(_ entry: UsageEntry) -> String {
         let leads = entry.rows.map { "\($0.name): \(entry.settings.limits[$0.id] ?? "Session")" }
         let rings = rings(entry).map { "\($0.row.name) \($0.limit == .asInApp ? "As in App" : "Weekly")" }
-        return (leads + ["numbers \(entry.settings.showNumbers ? "on" : "off")"]).joined(separator: ", ")
+        return (leads + ["numbers \(entry.settings.showNumbers ? "on" : "off")", entry.settings.showRemaining ? "remaining" : "used"]).joined(separator: ", ")
             + "\nRings: " + rings.joined(separator: ", ")
     }
 

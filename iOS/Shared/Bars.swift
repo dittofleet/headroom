@@ -12,9 +12,11 @@ extension Level {
 }
 
 /// A usage bar: a rounded track, the fill, and the pace tick, as in the
-/// Mac menu.
+/// Mac menu. `percent` is the share used, filled as what is left when
+/// `remaining`, and nil leaves the track empty.
 struct UsageBar: View {
-    var percent: Double
+    var percent: Double?
+    var remaining: Bool
     var pace: Double?
     var tint: Color = .accentColor
     var dimmed = false
@@ -27,9 +29,10 @@ struct UsageBar: View {
             let width = geometry.size.width
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.15))
-                // Never shrinks below a visible nub once anything is used.
-                let fillWidth = percent > 0 ? max(width * percent / 100, height) : 0
-                let fillColor = (Level(percent: percent).color ?? tint).opacity(dimmed ? 0.5 : 1)
+                // Never shrinks below a visible nub while there is any.
+                let shown = Format.fill(percent, remaining: remaining)
+                let fillWidth = shown > 0 ? max(width * shown / 100, height) : 0
+                let fillColor = (Level(percent: percent ?? 0).color ?? tint).opacity(dimmed ? 0.5 : 1)
                 if dotted {
                     Path { path in
                         path.move(to: CGPoint(x: 0, y: height / 2))
@@ -45,11 +48,12 @@ struct UsageBar: View {
             // stretch the bar to its own height or move it off center.
             .overlay(alignment: .leading) {
                 if let pace {
-                    // Fill past the tick means usage is running ahead of the clock.
+                    // Fill past the tick, or short of it when counting down,
+                    // means usage is running ahead of the clock.
                     Rectangle()
                         .fill(.primary.opacity(0.7))
                         .frame(width: 1.5, height: height + 3)
-                        .offset(x: width * pace - 0.75)
+                        .offset(x: width * (remaining ? 1 - pace : pace) - 0.75)
                 }
             }
         }
@@ -65,6 +69,7 @@ struct LimitRow: View {
     var now: Date
     var dimmed: Bool
     var showPace: Bool
+    var remaining: Bool
     var showReset = true
     var font: Font = .subheadline
     /// Thinner beside the widgets' smaller text.
@@ -76,13 +81,13 @@ struct LimitRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(title ?? limit.label).lineLimit(1)
                 Spacer(minLength: 4)
-                Text(Format.percent(percent))
+                Text(Format.percent(percent, remaining: remaining))
                     .fontWeight(.semibold)
                     .monospacedDigit()
                     .foregroundStyle(dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(Level(percent: percent).color ?? .primary))
             }
             .font(font)
-            UsageBar(percent: percent, pace: showPace ? limit.elapsedFraction(at: now) : nil, dimmed: dimmed, height: barHeight)
+            UsageBar(percent: percent, remaining: remaining, pace: showPace ? limit.elapsedFraction(at: now) : nil, dimmed: dimmed, height: barHeight)
             if showReset {
                 Text(Format.reset(limit.resetsAt, now: now))
                     .font(.caption2)

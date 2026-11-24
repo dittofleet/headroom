@@ -142,7 +142,7 @@ struct UsageView: View {
     /// "C 42%, X 13%"
     private var inline: some View {
         let parts = entry.rows.map { row in
-            "\(row.glyph) \(entry.headline(row).map { Format.percent($0.percent(at: entry.date)) } ?? "–")"
+            "\(row.glyph) \(entry.headline(row).map { Format.percent($0.percent(at: entry.date), remaining: entry.settings.showRemaining) } ?? "–")"
         }
         return Text(parts.joined(separator: ", "))
     }
@@ -163,18 +163,19 @@ struct UsageView: View {
                     // thinner lane under it, like the Mac menu bar.
                     VStack(spacing: 1) {
                         UsageBar(
-                            percent: headline?.percent(at: entry.date) ?? 0,
+                            percent: headline?.percent(at: entry.date),
+                            remaining: entry.settings.showRemaining,
                             pace: entry.settings.showPace ? headline?.elapsedFraction(at: entry.date) : nil,
                             tint: .primary,
                             height: stack == nil ? 5 : 3.5
                         )
                         if let stack {
-                            UsageBar(percent: stack.bottom.percent(at: entry.date), tint: .primary, height: 2.5, dotted: stack.replacesWeekly)
+                            UsageBar(percent: stack.bottom.percent(at: entry.date), remaining: entry.settings.showRemaining, tint: .primary, height: 2.5, dotted: stack.replacesWeekly)
                         }
                     }
                     .widgetAccentable()
                     if entry.settings.showNumbers {
-                        Text(headline.map { Format.percent($0.percent(at: entry.date)) } ?? "–")
+                        Text(headline.map { Format.percent($0.percent(at: entry.date), remaining: entry.settings.showRemaining) } ?? "–")
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
                             .fixedSize()
@@ -263,7 +264,7 @@ struct UsageView: View {
         if let snapshot = row.snapshot {
             let limits = headlineFirst ? entry.limitsLeadingWithHeadline(row) : snapshot.limits
             ForEach(Array(limits.prefix(count).enumerated()), id: \.offset) { index, limit in
-                LimitRow(limit: limit, title: index == 0 ? title : nil, now: entry.date, dimmed: entry.isDimmed(row), showPace: entry.settings.showPace, showReset: showReset, font: font, barHeight: 4)
+                LimitRow(limit: limit, title: index == 0 ? title : nil, now: entry.date, dimmed: entry.isDimmed(row), showPace: entry.settings.showPace, remaining: entry.settings.showRemaining, showReset: showReset, font: font, barHeight: 4)
             }
         } else {
             Text([title, row.error ?? "No data yet"].compactMap { $0 }.joined(separator: ": ")).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
@@ -282,10 +283,11 @@ struct GaugeFace: View {
         let row = if let accountID { entry.rows.first { $0.id == accountID } } else { entry.rows.first }
         let shown = row.flatMap { entry.limit(limit, of: $0) }
         let percent = shown?.percent(at: entry.date)
-        Gauge(value: (percent ?? 0) / 100) {
+        let remaining = entry.settings.showRemaining
+        Gauge(value: Format.fill(percent, remaining: remaining) / 100) {
             Text(row?.glyph ?? accountID.map { String($0.prefix(1)).uppercased() } ?? "")
         } currentValueLabel: {
-            Text(percent.map { "\(Format.wholePercent($0))" } ?? "–").monospacedDigit()
+            Text(percent.map { "\(Format.wholePercent($0, remaining: remaining))" } ?? "–").monospacedDigit()
         }
         .gaugeStyle(.accessoryCircularCapacity)
         .widgetAccentable()

@@ -101,6 +101,8 @@ struct WidgetSettings: Equatable {
     /// The percentages beside the lock screen bars, as the Mac's beside its
     /// menu bar ones.
     var showNumbers = true
+    /// Counting down what is left, rather than up with what is used.
+    var showRemaining = false
     /// By account id: the label of the limit it leads with, or
     /// `stackedChoice`. Without one, it leads with its session, as in the
     /// Mac menu bar.
@@ -111,6 +113,7 @@ struct WidgetSettings: Equatable {
         return WidgetSettings(
             showPace: defaults.object(forKey: "showPace") as? Bool ?? true,
             showNumbers: defaults.object(forKey: "showNumbers") as? Bool ?? true,
+            showRemaining: defaults.bool(forKey: "showRemaining"),
             limits: defaults.dictionary(forKey: "widgetLimits") as? [String: String] ?? [:]
         )
     }
@@ -119,6 +122,7 @@ struct WidgetSettings: Equatable {
         let defaults = Shared.defaults
         defaults.set(showPace, forKey: "showPace")
         defaults.set(showNumbers, forKey: "showNumbers")
+        defaults.set(showRemaining, forKey: "showRemaining")
         defaults.set(limits, forKey: "widgetLimits")
     }
 }

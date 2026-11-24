@@ -1,13 +1,21 @@
 import Foundation
 
 public enum Format {
-    /// Rounded down, so 100 only ever means actually out.
-    public static func wholePercent(_ value: Double) -> Int {
-        Int(value.rounded(.down))
+    /// Rounded down, so 100 only ever means actually out. `remaining`
+    /// counts down instead, what is left, so there 0 only ever means out.
+    public static func wholePercent(_ used: Double, remaining: Bool = false) -> Int {
+        let whole = Int(used.rounded(.down))
+        return remaining ? 100 - whole : whole
     }
 
-    public static func percent(_ value: Double) -> String {
-        "\(wholePercent(value))%"
+    public static func percent(_ used: Double, remaining: Bool = false) -> String {
+        "\(wholePercent(used, remaining: remaining))%"
+    }
+
+    /// How much of a bar `used` fills, 0...100: what is left when
+    /// `remaining`, and nothing without a number.
+    public static func fill(_ used: Double?, remaining: Bool) -> Double {
+        used.map { remaining ? 100 - $0 : $0 } ?? 0
     }
 
     /// "1h 44m", "5d 7h", "12m", "now".

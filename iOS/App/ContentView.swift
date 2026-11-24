@@ -43,7 +43,7 @@ struct ContentView: View {
     }
 
     /// The Mac's display settings, for the widgets: what each account
-    /// leads with, and the two toggles.
+    /// leads with, and the toggles.
     private func widgetSettings(now: Date) -> some View {
         Section {
             ForEach(model.providers, id: \.id) { provider in
@@ -55,10 +55,11 @@ struct ContentView: View {
             }
             Toggle("Show Numbers on Lock Screen", isOn: $model.settings.showNumbers)
             Toggle("Show Pace Marker", isOn: $model.settings.showPace)
+            Toggle("Show Remaining Instead of Used", isOn: $model.settings.showRemaining)
         } header: {
             Text("Widgets")
         } footer: {
-            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the weekly limit under it, or a model's own weekly, dotted, when that one is fuller.\n\nThe tick on each bar is how far through the window the clock is. A fill past it means you are burning faster than the window refills.")
+            Text("Each account's limit leads its lock screen bar, the line above the clock, the small widget, and rings set to As in App. Stacked leads with the session and puts the weekly limit under it, or a model's own weekly, dotted, when that one is fuller.\n\n\(model.settings.showRemaining ? "The tick on each bar is how much of the window is left. A fill short of it" : "The tick on each bar is how far through the window the clock is. A fill past it") means you are burning faster than the window refills.")
         }
     }
 
@@ -78,7 +79,7 @@ struct ContentView: View {
         Section {
             let dimmed = state.snapshot?.isStale(at: now, after: Shared.staleAfter) ?? true
             ForEach(Array((state.snapshot?.limits ?? []).enumerated()), id: \.offset) { _, limit in
-                LimitRow(limit: limit, now: now, dimmed: dimmed, showPace: model.settings.showPace)
+                LimitRow(limit: limit, now: now, dimmed: dimmed, showPace: model.settings.showPace, remaining: model.settings.showRemaining)
                     .padding(.vertical, 2)
             }
             if let notice = state.notice(at: now) {

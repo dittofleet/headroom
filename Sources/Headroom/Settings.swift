@@ -42,6 +42,11 @@ final class SettingsModel: ObservableObject {
         set { Preferences.showPace = newValue; changed() }
     }
 
+    var showRemaining: Bool {
+        get { Preferences.showRemaining }
+        set { Preferences.showRemaining = newValue; changed() }
+    }
+
     /// Nil until it has numbers, since the limits differ by account.
     func menuBarChoices(_ provider: MacProvider) -> [String]? {
         engine.state(provider).snapshot?.choices(at: Date())
@@ -199,6 +204,7 @@ struct SettingsView: View {
             Section("General") {
                 Toggle("Show numbers in menu bar", isOn: $model.showNumbers)
                 Toggle("Show pace marker", isOn: $model.showPace)
+                Toggle("Show remaining instead of used", isOn: $model.showRemaining)
                 Toggle("Start at login", isOn: $model.startAtLogin)
                 if let tool = model.commandLineTool {
                     LabeledContent {
