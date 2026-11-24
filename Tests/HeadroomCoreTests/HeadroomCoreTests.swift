@@ -18,6 +18,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     let snapshot = try #require(ClaudeProvider.parse(Data(json.utf8), now: now))
     #expect(snapshot.limits.map(\.label) == ["Session", "Weekly", "Fable Weekly"])
     #expect(snapshot.limits.map(\.percent) == [47, 49, 63])
+    #expect(snapshot.limits.map(\.kind) == [.session, .weekly, .scopedWeekly])
     #expect(snapshot.limits[0].resetsAt == Date(timeIntervalSince1970: 1_789_879_200))
     #expect(snapshot.limits[0].windowSeconds == 18000)
 }
@@ -54,6 +55,31 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(snapshot.limits.map(\.label) == ["Session", "Weekly", "Code review Weekly"])
     #expect(snapshot.limits.map(\.kind) == [.session, .weekly, .other])
     #expect(snapshot.limits[1].resetsAt == Date(timeIntervalSince1970: 1_789_925_529))
+}
+
+@Test func antigravityParsesGroups() throws {
+    let json = """
+    {"groups": [
+      {"displayName": "Gemini Models", "buckets": [
+        {"bucketId": "gemini-weekly", "window": "weekly", "resetTime": "2026-12-01T04:39:56Z", "remainingFraction": 0.75},
+        {"bucketId": "gemini-5h", "window": "5h", "resetTime": "2026-11-24T09:39:56.123Z", "remainingFraction": 0.1}]},
+      {"displayName": "Claude and GPT models", "buckets": [
+        {"bucketId": "3p-5h", "window": "5h", "resetTime": "2026-11-24T09:52:08Z", "remainingFraction": 1},
+        {"bucketId": "3p-daily", "window": "daily", "disabled": true}]}]}
+    """
+    let snapshot = try #require(AntigravityProvider.parse(Data(json.utf8), now: now))
+    #expect(snapshot.limits.map(\.label) == ["Gemini Session", "Gemini Weekly", "Claude and GPT Session"])
+    #expect(snapshot.limits.map(\.percent) == [90, 25, 0])
+    #expect(snapshot.limits.map(\.kind) == [.session, .weekly, .other])
+    // Stacked is Gemini's session over Gemini's weekly.
+    let stacked = try #require(snapshot.stacked(at: now))
+    #expect(stacked.top == snapshot.limits[0] && stacked.bottom == snapshot.limits[1] && !stacked.replacesWeekly)
+    #expect(snapshot.limits[0].windowSeconds == 5 * 3600 && snapshot.limits[1].windowSeconds == 7 * 86400)
+    #expect(snapshot.limits[0].resetsAt == Parse.isoDate("2026-11-24T09:39:56Z"))
+    #expect(AntigravityProvider.parse(Data(#"{"groups": []}"#.utf8), now: now) == nil)
+    #expect(AntigravityProvider.parsePlan(Data(#"{"currentTier": {"id": "free-tier"}, "paidTier": {"name": "Google AI Pro"}}"#.utf8)) == "Google AI Pro")
+    #expect(AntigravityProvider.parsePlan(Data(#"{"currentTier": {"id": "free-tier"}}"#.utf8)) == "Free")
+    #expect(AntigravityProvider.parsePlan(Data(#"{"error": {}}"#.utf8)) == nil)
 }
 
 @Test func planNames() {
@@ -131,7 +157,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 @Test func headlineFollowsTheChosenLimit() {
     let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
     let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
-    let scoped = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
+    let scoped = Limit(kind: .scopedWeekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
     let snapshot = Snapshot(limits: [session, weekly, scoped], plan: nil, fetchedAt: now)
     #expect(snapshot.headline(at: now, preferring: "Weekly") == weekly)
     #expect(snapshot.headline(at: now, preferring: "Fable Weekly") == scoped)
@@ -145,9 +171,9 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 @Test func stackedLanes() {
     let session = Limit(kind: .session, label: "Session", percent: 20, resetsAt: nil, windowSeconds: nil)
     let weekly = Limit(kind: .weekly, label: "Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
-    let fable = Limit(kind: .weekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
-    let calmFable = Limit(kind: .weekly, label: "Fable Weekly", percent: 10, resetsAt: nil, windowSeconds: nil)
-    let tiedFable = Limit(kind: .weekly, label: "Fable Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
+    let fable = Limit(kind: .scopedWeekly, label: "Fable Weekly", percent: 95, resetsAt: nil, windowSeconds: nil)
+    let calmFable = Limit(kind: .scopedWeekly, label: "Fable Weekly", percent: 10, resetsAt: nil, windowSeconds: nil)
+    let tiedFable = Limit(kind: .scopedWeekly, label: "Fable Weekly", percent: 40, resetsAt: nil, windowSeconds: nil)
     func lanes(_ limits: [Limit]) -> [Limit]? {
         Snapshot(limits: limits, plan: nil, fetchedAt: now).stacked(at: now).map { [$0.top, $0.bottom] }
     }
@@ -197,7 +223,7 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
 
 private struct StubProvider: Provider {
     var id = "stub", name = "Stub", glyph = "S"
-    let usageURL = URL(string: "https://example.com")!
+    let usageURL = URL(string: "https://example.com")
     func fetch() async -> Result<Snapshot, FetchFailure> { .failure(FetchFailure("unused")) }
 }
 
@@ -232,7 +258,7 @@ private struct StubProvider: Provider {
 /// A fetch that waits until let go, and notes whether it was cancelled.
 private struct GatedProvider: Provider {
     var id = "gated", name = "Gated", glyph = "G"
-    let usageURL = URL(string: "https://example.com")!
+    let usageURL = URL(string: "https://example.com")
     let gate = Gate()
 
     func fetch() async -> Result<Snapshot, FetchFailure> {
@@ -281,7 +307,7 @@ private struct GatedProvider: Provider {
 /// Counts its fetches, each of which takes a moment so that callers overlap.
 private struct CountingProvider: Provider {
     var id = "counting", name = "Counting", glyph = "C"
-    let usageURL = URL(string: "https://example.com")!
+    let usageURL = URL(string: "https://example.com")
     let fetches = Counter()
 
     func fetch() async -> Result<Snapshot, FetchFailure> {

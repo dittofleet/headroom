@@ -7,7 +7,7 @@ public struct CodexProvider: Sendable {
     public let id = "codex"
     public let name = "Codex"
     public let glyph = "X"
-    public let usageURL = URL(string: "https://chatgpt.com/codex/settings/usage")!
+    public let usageURL: URL? = URL(string: "https://chatgpt.com/codex/settings/usage")
 
     package static let endpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 

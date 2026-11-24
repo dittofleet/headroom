@@ -59,3 +59,13 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     #expect(large.input == nil)
     #expect(large.args == ["add-generic-password", "-U", "-a", "me", "-s", ClaudeProvider.keychainService, "-X", String(repeating: "41", count: 2000)])
 }
+
+@Test func antigravityCredentials() throws {
+    let json = #"{"token": {"access_token": "t", "refresh_token": "r", "expiry": "2026-11-23T22:38:57.869712-07:00"}, "auth_method": "consumer"}"#
+    let stored = Data("go-keyring-base64:\(Data(json.utf8).base64EncodedString())\n".utf8)
+    let creds = try #require(AntigravityProvider.parseCredentials(stored))
+    #expect(creds.token == "t")
+    #expect(creds.expiresAt == Date(timeIntervalSince1970: 1_795_498_737))
+    #expect(AntigravityProvider.parseCredentials(Data(json.utf8))?.token == "t")
+    #expect(AntigravityProvider.parseCredentials(Data("go-keyring-base64:!!".utf8)) == nil)
+}

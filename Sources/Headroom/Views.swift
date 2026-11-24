@@ -13,10 +13,12 @@ extension Level {
 }
 
 /// The menu bar icon: one row per provider with its letter, a bar, and the
-/// percentage of the limit chosen for it. Two stacked rows keep it narrow enough for notched
-/// displays.
+/// percentage of the limit chosen for it. Rows stack two to a column, which
+/// keeps it narrow enough for notched displays, and a third starts another.
 enum StatusIcon {
     struct Row: Equatable {
+        /// The provider's, for reading the icon out.
+        var name: String
         var glyph: String
         /// The limit showing, and how much of it is used. nil when there is
         /// no data at all.
@@ -43,14 +45,19 @@ enum StatusIcon {
         var numbers: Bool
     }
 
+    /// A row per provider, but for those that have never had numbers and
+    /// failed to get any, such as one whose CLI isn't signed in. Their
+    /// reason is in the menu.
     @MainActor
     static func spec(engine: Engine, chrome: MenuChrome, now: Date) -> Spec {
-        let rows = engine.providers.map { provider -> Row in
+        let shown = engine.providers.filter { engine.state($0).snapshot != nil || engine.state($0).lastError == nil }
+        let rows = (shown.isEmpty ? engine.providers : shown).map { provider -> Row in
             let snapshot = engine.state(provider).snapshot
             let choice = chrome.menuBarLimits[provider.id]
             let headline = snapshot?.headline(at: now, preferring: choice)
             let stack = choice == stackedChoice ? snapshot?.stacked(at: now) : nil
             return Row(
+                name: provider.name,
                 glyph: provider.glyph,
                 label: headline?.label,
                 percent: headline?.percent(at: now),
@@ -66,14 +73,22 @@ enum StatusIcon {
         let rowHeight: CGFloat = rows.count > 1 ? 10 : 14
         let fontSize: CGFloat = rows.count > 1 ? 9 : 11
         let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold)
-        let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, gap: CGFloat = 3
+        let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, gap: CGFloat = 3, columnGap: CGFloat = 6
         let badgeWidth: CGFloat = spec.badge ? 7 : 0
         let texts = rows.map { row in row.percent.map { "\(Format.wholePercent($0))" } ?? "–" }
         let textSizes = texts.map { ($0 as NSString).size(withAttributes: [.font: font]) }
-        // Sized to the widest number showing, so a "9" sits as close to its
-        // bar as a "74" does. The width only moves when a digit comes or goes.
-        let numberWidth: CGFloat = spec.numbers ? gap + ceil(textSizes.map(\.width).max() ?? 0) : 0
-        let size = NSSize(width: glyphWidth + barWidth + numberWidth + badgeWidth, height: rowHeight * CGFloat(max(rows.count, 1)))
+        let perColumn = 2
+        // Where each column starts. Numbers are sized to the widest in their
+        // column, so a "9" sits as close to its bar as a "74" does. The width
+        // only moves when a digit comes or goes.
+        var columnX: [CGFloat] = [], width: CGFloat = 0
+        for start in stride(from: 0, to: rows.count, by: perColumn) {
+            if start > 0 { width += columnGap }
+            columnX.append(width)
+            let widest = textSizes[start..<min(start + perColumn, rows.count)].map(\.width).max() ?? 0
+            width += glyphWidth + barWidth + (spec.numbers ? gap + ceil(widest) : 0)
+        }
+        let size = NSSize(width: width + badgeWidth, height: rowHeight * CGFloat(max(min(rows.count, perColumn), 1)))
         let levels = rows.map { Level(percent: $0.percent ?? 0) }
         let weeklyLevels = rows.compactMap(\.weekly).map { Level(percent: $0.percent) }
         func isDark(_ appearance: NSAppearance) -> Bool {
@@ -92,7 +107,7 @@ enum StatusIcon {
 
         let image = NSImage(size: size, flipped: false) { _ in
             for (index, row) in rows.enumerated() {
-                let y = size.height - rowHeight * CGFloat(index + 1)
+                let x = columnX[index / perColumn], y = size.height - rowHeight * CGFloat(index % perColumn + 1)
                 let color = ink(levels[index])
                 let alpha: CGFloat = row.stale || row.percent == nil ? 0.45 : 1
                 let attributes: [NSAttributedString.Key: Any] = [
@@ -101,10 +116,10 @@ enum StatusIcon {
                 ]
 
                 let glyph = NSAttributedString(string: row.glyph, attributes: attributes)
-                glyph.draw(at: NSPoint(x: 0, y: y + (rowHeight - glyph.size().height) / 2))
+                glyph.draw(at: NSPoint(x: x, y: y + (rowHeight - glyph.size().height) / 2))
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
-                let track = NSRect(x: glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
+                let track = NSRect(x: x + glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
                 func drawLane(_ lane: NSRect, percent: Double, color: NSColor, dotted: Bool = false) {
                     drawBar(lane, percent: percent, trackColor: color.withAlphaComponent(0.25 * alpha), fillColor: color.withAlphaComponent(alpha), minFill: 2, dotted: dotted)
                 }
@@ -208,7 +223,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
         entries += group.map(MenuEntry.view)
         entries.append(.view(SeparatorView()))
     }
-    for (index, provider) in engine.providers.enumerated() {
+    for (index, provider) in engine.providers.enumerated() where provider.usageURL != nil {
         entries.append(.action(title: "Open \(provider.name) Usage Page", selector: #selector(AppDelegate.openUsagePage(_:)), tag: index))
     }
     entries.append(.action(title: "Settings…", selector: #selector(AppDelegate.openSettings), key: ","))

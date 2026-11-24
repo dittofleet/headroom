@@ -86,7 +86,9 @@ struct ContentView: View {
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
-            Button("Open Usage Page") { openURL(provider.usageURL) }
+            if let url = provider.usageURL {
+                Button("Open Usage Page") { openURL(url) }
+            }
             Button("Sign Out", role: .destructive) { model.signOut(provider) }
         } header: {
             HStack(alignment: .firstTextBaseline) {

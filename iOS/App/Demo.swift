@@ -32,7 +32,7 @@ enum Demo {
         let id: String
         let name: String
         let glyph: String
-        let usageURL = URL(string: "https://example.com")!
+        let usageURL = URL(string: "https://example.com")
         let snapshot: Snapshot
 
         func fetch() async -> Result<Snapshot, FetchFailure> {

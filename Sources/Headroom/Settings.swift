@@ -111,12 +111,13 @@ final class SettingsModel: ObservableObject {
 
     /// One login at a time: starting another cancels the one waiting.
     func logIn(_ provider: MacProvider) {
+        guard let client = provider.own?.client else { return }
         cancelLogIn()
         let signIn = LoopbackSignIn.browser()
         self.signIn = signIn
         loggingIn = provider.id
         Task {
-            let result = await signIn.runInBrowser(provider.own.client)
+            let result = await signIn.runInBrowser(client)
             // Cancelled, or replaced by another login, at any point.
             guard self.signIn === signIn else { return }
             self.signIn = nil
@@ -224,41 +225,44 @@ private struct ProviderSettings: View {
     let provider: MacProvider
 
     var body: some View {
-        let usesCLI = model.usesCLICredentials(provider)
-        Picker("Credentials", selection: usesCLI) {
-            Text("Use \(provider.cli) credentials").tag(true)
-            Text("Manage credentials separately").tag(false)
-        }
-        .pickerStyle(.radioGroup)
+        // Some providers can only be borrowed from their CLI.
+        if provider.own != nil {
+            let usesCLI = model.usesCLICredentials(provider)
+            Picker("Credentials", selection: usesCLI) {
+                Text("Use \(provider.cli) credentials").tag(true)
+                Text("Manage credentials separately").tag(false)
+            }
+            .pickerStyle(.radioGroup)
 
-        if model.loggingIn == provider.id {
-            LabeledContent {
-                Button("Cancel") { model.cancelLogIn() }
-            } label: {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Waiting for the browser login")
+            if model.loggingIn == provider.id {
+                LabeledContent {
+                    Button("Cancel") { model.cancelLogIn() }
+                } label: {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Waiting for the browser login")
+                    }
                 }
-            }
-        } else if usesCLI.wrappedValue {
-            if provider.refreshesCLICredentials {
-                Toggle(isOn: $model.passiveMode) {
-                    Text("Passive mode")
-                    Text("Never refresh \(provider.cli) credentials. While they're expired, the numbers wait for \(provider.cli) to refresh them.")
+            } else if usesCLI.wrappedValue {
+                if provider.refreshesCLICredentials {
+                    Toggle(isOn: $model.passiveMode) {
+                        Text("Passive mode")
+                        Text("Never refresh \(provider.cli) credentials. While they're expired, the numbers wait for \(provider.cli) to refresh them.")
+                    }
                 }
-            }
-        } else if model.isLoggedIn(provider) {
-            LabeledContent {
-                Button("Log Out") { model.logOut(provider) }
-            } label: {
-                Text("Logged in")
-                if let email = model.email(provider) { Text(email) }
-            }
-        } else {
-            LabeledContent {
-                Button("Log In…") { model.logIn(provider) }
-            } label: {
-                Text("Logged out")
+            } else if model.isLoggedIn(provider) {
+                LabeledContent {
+                    Button("Log Out") { model.logOut(provider) }
+                } label: {
+                    Text("Logged in")
+                    if let email = model.email(provider) { Text(email) }
+                }
+            } else {
+                LabeledContent {
+                    Button("Log In…") { model.logIn(provider) }
+                } label: {
+                    Text("Logged out")
+                }
             }
         }
 

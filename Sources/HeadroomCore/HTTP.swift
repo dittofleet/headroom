@@ -37,9 +37,10 @@ package enum HTTP {
     }
 
     /// POST a JSON body, with the same outcomes as `get`.
-    package static func post(_ url: URL, json: [String: Any], authHint: String) async -> Result<Data, FetchFailure> {
+    package static func post(_ url: URL, json: [String: Any], headers: [String: String] = [:], authHint: String) async -> Result<Data, FetchFailure> {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: json)
         return await send(request, authHint: authHint)

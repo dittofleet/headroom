@@ -87,7 +87,7 @@ struct Account: Provider {
     }
 
     var id: String { base.id }
-    var usageURL: URL { base.usageURL }
+    var usageURL: URL? { base.usageURL }
 
     func fetch() async -> Result<Snapshot, FetchFailure> {
         await base.fetch()

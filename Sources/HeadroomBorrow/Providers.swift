@@ -2,7 +2,7 @@ import Foundation
 import HeadroomCore
 
 /// Every provider, in menu order.
-public let allProviders: [any Provider] = [ClaudeProvider(), CodexProvider()]
+public let allProviders: [any Provider] = [ClaudeProvider(), CodexProvider(), AntigravityProvider()]
 
 /// Whose credentials each provider is fetched with, and how much Headroom
 /// may do with Claude Code's.

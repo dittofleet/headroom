@@ -7,7 +7,7 @@ public struct ClaudeProvider: Sendable {
     public let id = "claude"
     public let name = "Claude"
     public let glyph = "C"
-    public let usageURL = URL(string: "https://claude.ai/settings/usage")!
+    public let usageURL: URL? = URL(string: "https://claude.ai/settings/usage")
 
     package static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
@@ -40,7 +40,7 @@ public struct ClaudeProvider: Sendable {
                 let model = (scope?["model"] as? [String: Any])?["display_name"] as? String
                 let surface = scope?["surface"] as? String
                 let label = [model, surface].compactMap { $0 }.joined(separator: " ")
-                limits.append(Limit(kind: .weekly, label: "\(label.isEmpty ? "Scoped" : label) Weekly", percent: percent, resetsAt: resetsAt, windowSeconds: weeklyWindow))
+                limits.append(Limit(kind: .scopedWeekly, label: "\(label.isEmpty ? "Scoped" : label) Weekly", percent: percent, resetsAt: resetsAt, windowSeconds: weeklyWindow))
             default:
                 let window: Double? = (entry["group"] as? String) == "weekly" ? weeklyWindow : nil
                 limits.append(Limit(kind: .other, label: Format.title(kind), percent: percent, resetsAt: resetsAt, windowSeconds: window))
@@ -52,8 +52,8 @@ public struct ClaudeProvider: Sendable {
             let legacy: [(String, Limit.Kind, String, Double)] = [
                 ("five_hour", .session, "Session", sessionWindow),
                 ("seven_day", .weekly, "Weekly", weeklyWindow),
-                ("seven_day_opus", .weekly, "Opus Weekly", weeklyWindow),
-                ("seven_day_sonnet", .weekly, "Sonnet Weekly", weeklyWindow),
+                ("seven_day_opus", .scopedWeekly, "Opus Weekly", weeklyWindow),
+                ("seven_day_sonnet", .scopedWeekly, "Sonnet Weekly", weeklyWindow),
             ]
             for (key, kind, label, window) in legacy {
                 guard let entry = root[key] as? [String: Any], let percent = Parse.number(entry["utilization"]) else { continue }
@@ -139,16 +139,16 @@ package actor PlanLookup {
     /// By the account the tokens are stored as.
     private var asked: [String: Asked] = [:]
 
-    /// Nil until the profile has answered, in which case the stored plan is
-    /// the best there is.
-    package func plan(for account: String, token: String, scopes: [String]) async -> String? {
+    /// Nil until `ask` has answered, in which case the stored plan is the
+    /// best there is. Claude's profile unless told otherwise.
+    package func plan(for account: String, token: String, scopes: [String] = [], ask: @Sendable (String) async -> String? = { await PlanLookup.ask(token: $0) }) async -> String? {
         // A token without the profile scope would only be refused.
         guard scopes.isEmpty || scopes.contains("user:profile") else { return nil }
         let last = asked[account, default: Asked()]
         guard !last.asking, token != last.token || Date() >= last.next else { return last.plan }
         asked[account, default: Asked()].asking = true
         asked[account]?.token = token
-        let answer = await Self.ask(token: token)
+        let answer = await ask(token)
         asked[account]?.asking = false
         if let answer { asked[account]?.plan = answer }
         asked[account]?.next = Date().addingTimeInterval(answer == nil ? Self.retryAfter : Self.askAgainAfter)
