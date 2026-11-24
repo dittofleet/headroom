@@ -87,7 +87,7 @@ public struct ClaudeAccountProvider: AccountProvider {
     public let id: String
     public var name: String { Self.base.name }
     public var glyph: String { Self.base.glyph }
-    public var usageURL: URL { Self.base.usageURL }
+    public var usageURL: URL? { Self.base.usageURL }
     public var client: OAuthClient { .claude }
 
     let store: AccountStore
@@ -126,7 +126,7 @@ public struct CodexAccountProvider: AccountProvider {
     public let id: String
     public var name: String { Self.base.name }
     public var glyph: String { Self.base.glyph }
-    public var usageURL: URL { Self.base.usageURL }
+    public var usageURL: URL? { Self.base.usageURL }
     public var client: OAuthClient { .codex }
 
     let store: AccountStore

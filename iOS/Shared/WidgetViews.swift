@@ -53,7 +53,7 @@ struct UsageEntry: TimelineEntry {
         let claude = Snapshot(limits: [
             limit(.session, "Session", 42, resetsIn: 2 * 3600, window: 5 * 3600),
             limit(.weekly, "Weekly", 30, resetsIn: 3 * 86400, window: 7 * 86400),
-            limit(.weekly, "Fable Weekly", 63, resetsIn: 3 * 86400, window: 7 * 86400),
+            limit(.scopedWeekly, "Fable Weekly", 63, resetsIn: 3 * 86400, window: 7 * 86400),
         ], plan: "Ultra", fetchedAt: now)
         let codex = Snapshot(limits: [
             limit(.session, "Session", 13, resetsIn: 4 * 3600, window: 5 * 3600),
@@ -99,7 +99,7 @@ extension UsageEntry {
         switch choice {
         case .asInApp: return headline(row)
         case .session: return limits.first { $0.kind == .session } ?? headline(row)
-        case .weekly: return row.snapshot?.generalWeekly ?? limits.first { $0.kind == .weekly }
+        case .weekly: return row.snapshot?.generalWeekly ?? limits.first(where: \.isScoped)
         }
     }
 }

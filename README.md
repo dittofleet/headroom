@@ -2,17 +2,18 @@
 
 # headroom
 
-A simple menu bar app for your Claude and Codex usage limits.
+A simple menu bar app for your Claude, Codex, and Antigravity usage limits.
 
 <img src="docs/menu.png" width="270" alt="The headroom menu">
 
-The menu bar shows one row per provider: how much of the current session
-window is used. Settings lets you pick a different window per provider,
-such as Claude's weekly or a model-scoped weekly limit, and every window
-is still listed in the menu. "Stacked" splits the bar in two: the session on
-top, and below it the weekly limit, or a model's own weekly such as
-Claude's Fable weekly, dotted, when it is ahead of the general one. Without
-a session, the weekly goes on top and the model's weekly below, undotted.
+The menu bar shows a row per provider you're signed in to, two to a column:
+how much of the current session window is used. Settings lets you pick a
+different window per provider, such as Claude's weekly or a model-scoped
+weekly limit, and every window is still listed in the menu. "Stacked"
+splits the bar in two: the session on top, and below it the weekly limit,
+or a model's own weekly such as Claude's Fable weekly, dotted, when it is
+ahead of the general one. Without a session, the weekly goes on top and the
+model's weekly below, undotted.
 Rows turn orange at 75% and red at 90%.
 "Show numbers in menu bar" drops the percentages and leaves just the bars,
 for a narrower icon.
@@ -23,9 +24,10 @@ means you are burning faster than the window refills. "Show pace marker" in
 Settings hides the ticks if you would rather not see them.
 
 It does one thing and is simple about it: no dependencies and a short
-Settings window. It borrows the sessions Claude Code and Codex already have,
-shows you the numbers, and otherwise stays out of the way. Being a single
-small native binary is a side effect of that.
+Settings window. It borrows the sessions Claude Code, Codex, and the
+Antigravity CLI already have, shows you the numbers, and otherwise stays
+out of the way. Being a single small native binary is a side effect of
+that.
 
 ## Install
 
@@ -84,6 +86,7 @@ and scripts:
 ```sh
 headroom claude          # as text
 headroom codex --json    # percent used and reset time per limit
+headroom antigravity
 ```
 
 It asks for one provider at a time so an agent only sees the limits it runs
@@ -107,9 +110,10 @@ minutes, never inside a server cooldown, and once for all the agents that
 ask at the same moment, while the rest wait for what it saves. A box where
 nobody asks makes no requests.
 
-It only reads the credentials Claude Code and Codex keep on the box,
-`~/.claude/.credentials.json` and `~/.codex/auth.json`, and never renews
-them, like Passive mode. There are no logins of its own.
+It only reads the credentials Claude Code, Codex, and the Antigravity CLI
+keep on the box, `~/.claude/.credentials.json`, `~/.codex/auth.json`, and
+`~/.gemini/antigravity-cli/antigravity-oauth-token`, and never renews them,
+like Passive mode. There are no logins of its own.
 
 It keeps itself current like every dittofleet CLI: once a day, after a
 command run in a terminal, it installs a newer release if there is one.
@@ -141,6 +145,11 @@ credentials your CLIs already have:
   hour, since the one stored with the token can predate an upgrade.
 - **Codex**: the token the Codex CLI keeps in `~/.codex/auth.json`, against
   the endpoint behind `/status`.
+- **Antigravity**: the token the Antigravity CLI (`agy`) keeps in the
+  keychain (or `~/.gemini/antigravity-cli/antigravity-oauth-token`), against the endpoint behind its `/usage`. Its models share
+  limits in groups, one for Gemini and one for Claude and GPT, each with a
+  session and a weekly limit. The menu bar leads with Gemini's, and Stacked
+  puts Gemini's session over its weekly.
 
 Tokens are only sent to the provider they belong to.
 
@@ -159,8 +168,10 @@ alone unless the server rejects it, so the two do not rotate the refresh
 token out from under each other. When the refresh token itself has been
 revoked, the menu says to sign in again with `claude login`.
 
-Codex's token is only ever read. When it expires the menu says so, and the
-numbers come back the next time you use Codex.
+Codex's and the Antigravity CLI's tokens are only ever read. When one
+expires the menu says so, and the numbers come back the next time you use
+that CLI. The Antigravity CLI's lasts only an hour, but its numbers only
+move while you use it, which is when it renews the token.
 
 The keychain is read and written through `/usr/bin/security`, which Claude
 Code's keychain item already trusts, so there is no password prompt.
@@ -238,7 +249,7 @@ then.
 | Path | What it is | Used by |
 | --- | --- | --- |
 | `Sources/HeadroomCore` | The providers' endpoints and responses, the engine that decides when to fetch and keeps the numbers, formatting, finding our own releases. No platform code. | everything |
-| `Sources/HeadroomBorrow` | Borrowing Claude Code's and the Codex CLI's sessions. Builds on Linux too. | Mac app, CLI |
+| `Sources/HeadroomBorrow` | Borrowing Claude Code's, the Codex CLI's, and the Antigravity CLI's sessions. Builds on Linux too. | Mac app, CLI |
 | `Sources/HeadroomMac` | Updating the app, the `headroom` link. | Mac app |
 | `Sources/HeadroomAccounts` | Sessions of our own: sign-in, keychain storage, renewal. | iPhone app, Mac app |
 | `Sources/Headroom` | The menu bar app. | |

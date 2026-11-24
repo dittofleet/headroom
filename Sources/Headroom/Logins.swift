@@ -8,6 +8,7 @@ import HeadroomBorrow
 let appProviders: [MacProvider] = [
     MacProvider(borrowed: ClaudeProvider(), cli: "Claude Code CLI", refreshesCLICredentials: true, own: ClaudeAccountProvider(store: accountStore)),
     MacProvider(borrowed: CodexProvider(), cli: "Codex CLI", refreshesCLICredentials: false, own: CodexAccountProvider(store: accountStore)),
+    MacProvider(borrowed: AntigravityProvider(), cli: "Antigravity CLI", refreshesCLICredentials: false, own: nil),
 ]
 
 /// Headroom's own logins, for a provider not using its CLI's credentials.
@@ -20,15 +21,17 @@ struct MacProvider: Provider {
     let cli: String
     /// Whether expired CLI credentials are refreshed, outside Passive mode.
     let refreshesCLICredentials: Bool
-    let own: any AccountProvider
+    /// Nil when Headroom can't log in on its own.
+    let own: (any AccountProvider)?
 
     var id: String { borrowed.id }
     var name: String { borrowed.name }
     var glyph: String { borrowed.glyph }
-    var usageURL: URL { borrowed.usageURL }
+    var usageURL: URL? { borrowed.usageURL }
 
     func fetch() async -> Result<Snapshot, FetchFailure> {
-        LoginPreferences.usesCLICredentials(id) ? await borrowed.fetch() : await own.fetch()
+        guard let own, !LoginPreferences.usesCLICredentials(id) else { return await borrowed.fetch() }
+        return await own.fetch()
     }
 }
 

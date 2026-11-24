@@ -84,8 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Reads out what the icon shows, a stacked weekly limit included.
     private func accessibilitySummary(_ spec: StatusIcon.Spec) -> String {
-        zip(engine.providers, spec.rows).map { provider, row in
-            let front = [provider.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
+        spec.rows.map { row in
+            let front = [row.name, row.label, row.percent.map(Format.percent) ?? "unknown"].compactMap { $0 }.joined(separator: " ")
             let weekly = row.weekly.map { "\($0.label) \(Format.percent($0.percent))" }
             return [front, weekly].compactMap { $0 }.joined(separator: ", ")
         }.joined(separator: ". ")
@@ -180,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openUsagePage(_ sender: NSMenuItem) {
-        NSWorkspace.shared.open(engine.providers[sender.tag].usageURL)
+        if let url = engine.providers[sender.tag].usageURL { NSWorkspace.shared.open(url) }
     }
 
     @objc func quit() {

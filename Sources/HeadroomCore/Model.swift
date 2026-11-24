@@ -2,7 +2,9 @@ import Foundation
 
 /// One usage window of a provider, e.g. the 5-hour session or a weekly cap.
 public struct Limit: Codable, Equatable, Sendable {
-    public enum Kind: String, Codable, Sendable { case session, weekly, other }
+    /// `weekly` is the weekly limit for every model, and `scopedWeekly` one
+    /// model's own, like Fable's.
+    public enum Kind: String, Codable, Sendable { case session, weekly, scopedWeekly, other }
 
     /// Where a limit starts to need attention, and where it is nearly gone.
     public static let warningPercent: Double = 75
@@ -37,7 +39,7 @@ public struct Limit: Codable, Equatable, Sendable {
     }
 
     /// A weekly limit for one model, like Fable's, rather than the general one.
-    public var isScoped: Bool { kind == .weekly && label != "Weekly" }
+    public var isScoped: Bool { kind == .scopedWeekly }
 }
 
 public struct Snapshot: Codable, Equatable, Sendable {
@@ -78,7 +80,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
 
     /// The weekly limit for every model.
     public var generalWeekly: Limit? {
-        limits.first { $0.kind == .weekly && !$0.isScoped }
+        limits.first { $0.kind == .weekly }
     }
 
     /// The two lanes of a Stacked row. With a session: the session over the
@@ -138,7 +140,8 @@ public protocol Provider: Sendable {
     var name: String { get }
     /// Single letter shown next to the bar in the menu bar.
     var glyph: String { get }
-    var usageURL: URL { get }
+    /// Nil for a provider with no usage page on the web.
+    var usageURL: URL? { get }
     func fetch() async -> Result<Snapshot, FetchFailure>
 }
 
