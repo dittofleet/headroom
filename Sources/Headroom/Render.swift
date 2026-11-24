@@ -8,13 +8,13 @@ enum Render {
     static func png(engine: Engine, to url: URL, dark: Bool, updateReady: Bool = false, now: Date = Date()) throws {
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
         var chrome = AppDelegate(engine: engine).chrome
-        if updateReady { (chrome.updateReady, chrome.about) = (true, chrome.about + " · v0.0.2 is ready") }
+        if updateReady { (chrome.updateReady, chrome.updateStatus) = (true, "v0.0.2 is ready") }
         let entries = menuEntries(engine: engine, chrome: chrome, now: now)
         let icon = StatusIcon.image(StatusIcon.spec(engine: engine, chrome: chrome, now: now))
         func height(_ entry: MenuEntry) -> CGFloat {
             switch entry {
             case .view(let view): return view.frame.height
-            case .info, .action: return 22
+            case .action: return 22
             }
         }
 
@@ -70,8 +70,6 @@ enum Render {
                     transform.concat()
                     view.draw(view.bounds)
                     NSGraphicsContext.restoreGraphicsState()
-                case .info(let string, _):
-                    text(string, x: textX, color: .tertiaryLabelColor)
                 case .action(let title, _, let key, _):
                     text(title, x: textX, color: .labelColor)
                     if !key.isEmpty { text("⌘\(key.uppercased())", x: size.width - MenuMetrics.inset, color: .tertiaryLabelColor, rightAligned: true) }

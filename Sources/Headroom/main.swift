@@ -93,8 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     var chrome: MenuChrome {
         MenuChrome(
-            about: ["Headroom \(appVersion)", updates.status].compactMap { $0 }.joined(separator: " · "),
-            aboutDetail: updates.detail,
+            updateStatus: updates.status,
+            updateDetail: updates.detail,
             updateReady: updates.installed != nil,
             canUpdate: updates.canUpdate,
             showPace: Preferences.showPace,
@@ -113,11 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let item = NSMenuItem()
                 item.view = view
                 item.isEnabled = false
-                menu.addItem(item)
-            case .info(let text, let toolTip):
-                let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                item.toolTip = toolTip
                 menu.addItem(item)
             case .action(let title, let selector, let key, let tag):
                 let item = NSMenuItem(title: title, action: selector, keyEquivalent: key)
@@ -221,8 +216,10 @@ if arguments.contains("--print") {
             switch await provider.fetch() {
             case .success(let snapshot):
                 print("\(provider.name)\(snapshot.plan.map { " (\($0))" } ?? "")")
+                let now = Date()
                 for limit in snapshot.limits {
-                    print("  \(limit.label): \(Format.percent(limit.percent)) · \(Format.reset(limit.resetsAt, now: Date()))")
+                    let countdown = Format.countdown(limit.resetsAt, now: now).map { "  \($0)" } ?? ""
+                    print("  \(limit.label): \(Format.percent(limit.percent))  \(Format.reset(limit.resetsAt, now: now))\(countdown)")
                 }
             case .failure(let failure):
                 print("\(provider.name): \(failure.message)")
