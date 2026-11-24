@@ -84,10 +84,17 @@ struct LimitRow: View {
             .font(font)
             UsageBar(percent: percent, pace: showPace ? limit.elapsedFraction(at: now) : nil, dimmed: dimmed, height: barHeight)
             if showReset {
-                Text(Format.reset(limit.resetsAt, now: now))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack {
+                    Text(Format.reset(limit.resetsAt, now: now))
+                    Spacer(minLength: 4)
+                    if let countdown = Format.countdown(limit.resetsAt, now: now) {
+                        // In a narrow widget column the date gives way first.
+                        Text(countdown).monospacedDigit().layoutPriority(1)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
         }
     }

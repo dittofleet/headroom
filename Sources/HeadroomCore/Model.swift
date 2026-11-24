@@ -165,11 +165,11 @@ public struct ProviderState: Codable, Sendable {
 
     public init() {}
 
-    /// Why the last refresh failed, and when the next is due.
+    /// Why the last refresh failed, and on a second line when the next is due.
     public func notice(at now: Date) -> String? {
         guard let lastError else { return nil }
         let wait = nextFetchAt.timeIntervalSince(now)
-        return wait > 0 ? "\(lastError) · retry in \(Format.duration(wait))" : lastError
+        return wait > 0 ? "\(lastError)\nRetrying in \(Format.duration(wait))" : lastError
     }
 
     /// Tolerates missing keys, so a cache written by another version still

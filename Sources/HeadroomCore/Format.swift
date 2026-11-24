@@ -20,7 +20,7 @@ public enum Format {
         return hours % 24 == 0 ? "\(hours / 24)d" : "\(hours / 24)d \(hours % 24)h"
     }
 
-    /// "Resets 9:40 PM · in 1h 44m" or "Resets Thu 3:00 AM · in 5d 7h".
+    /// "Resets 9:40 PM" or "Resets Thu 3:00 AM".
     public static func reset(_ resetsAt: Date?, now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
         guard let resetsAt else { return "No active window" }
         guard resetsAt > now else { return "Window reset" }
@@ -28,7 +28,13 @@ public enum Format {
         formatter.locale = locale
         formatter.timeZone = calendar.timeZone
         formatter.setLocalizedDateFormatFromTemplate(calendar.isDate(resetsAt, inSameDayAs: now) ? "jmm" : "EEEjmm")
-        return "Resets \(formatter.string(from: resetsAt)) · in \(duration(resetsAt.timeIntervalSince(now)))"
+        return "Resets \(formatter.string(from: resetsAt))"
+    }
+
+    /// "in 1h 44m", for a reset still ahead.
+    public static func countdown(_ resetsAt: Date?, now: Date) -> String? {
+        guard let resetsAt, resetsAt > now else { return nil }
+        return "in \(duration(resetsAt.timeIntervalSince(now)))"
     }
 
     /// An id with no name of its own, readable anyway: "edu_plus" is "Edu Plus".

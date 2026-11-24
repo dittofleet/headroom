@@ -216,9 +216,21 @@ private let now = Date(timeIntervalSince1970: 1_789_873_000)
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
     let locale = Locale(identifier: "en_US")
-    #expect(Format.reset(now.addingTimeInterval(6240), now: now, calendar: calendar, locale: locale).hasSuffix("· in 1h 44m"))
+    #expect(Format.reset(now.addingTimeInterval(6240), now: now, calendar: calendar, locale: locale).hasPrefix("Resets "))
     #expect(Format.reset(now.addingTimeInterval(5 * 86400), now: now, calendar: calendar, locale: locale).hasPrefix("Resets Thu"))
+    #expect(Format.countdown(now.addingTimeInterval(6240), now: now) == "in 1h 44m")
+    #expect(Format.countdown(now, now: now) == nil)
+    #expect(Format.countdown(nil, now: now) == nil)
     #expect(Format.reset(nil, now: now) == "No active window")
+}
+
+@Test func noticePutsTheRetryOnItsOwnLine() {
+    var state = ProviderState()
+    #expect(state.notice(at: now) == nil)
+    state.lastError = "Offline"
+    #expect(state.notice(at: now) == "Offline")
+    state.nextFetchAt = now.addingTimeInterval(90)
+    #expect(state.notice(at: now) == "Offline\nRetrying in 1m")
 }
 
 private struct StubProvider: Provider {

@@ -201,14 +201,13 @@ enum Preferences {
 /// draws them, so the two can't drift apart.
 enum MenuEntry {
     case view(NSView)
-    case info(String, toolTip: String? = nil)
     case action(title: String, selector: Selector, key: String = "", tag: Int = 0)
 }
 
 /// The parts of the menu that don't come from the engine.
 struct MenuChrome {
-    var about: String
-    var aboutDetail: String?
+    var updateStatus: String?
+    var updateDetail: String?
     var updateReady: Bool
     var canUpdate: Bool
     var showPace: Bool
@@ -228,7 +227,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     }
     entries.append(.action(title: "Settings…", selector: #selector(AppDelegate.openSettings), key: ","))
     entries.append(.view(SeparatorView()))
-    entries.append(.info(chrome.about, toolTip: chrome.aboutDetail))
+    entries.append(.view(AboutView(status: chrome.updateStatus, detail: chrome.updateDetail)))
     if chrome.updateReady {
         entries.append(.action(title: "Restart to Update", selector: #selector(AppDelegate.restartToUpdate)))
     } else if chrome.canUpdate {
@@ -287,8 +286,14 @@ final class NoticeView: NSView {
     private let text: NSAttributedString
 
     init(text: String) {
-        self.text = NSAttributedString(string: "⚠ \(text)", attributes: [
-            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.systemOrange,
+        let font = NSFont.systemFont(ofSize: 11)
+        let sign = "⚠ "
+        // Further lines hang under the text rather than the sign. Line
+        // separators keep it one paragraph, which the indent applies to.
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.headIndent = (sign as NSString).size(withAttributes: [.font: font]).width
+        self.text = NSAttributedString(string: sign + text.replacingOccurrences(of: "\n", with: "\u{2028}"), attributes: [
+            .font: font, .foregroundColor: NSColor.systemOrange, .paragraphStyle: paragraph,
         ])
         let width = MenuMetrics.width - MenuMetrics.inset * 2
         let height = ceil(self.text.boundingRect(with: NSSize(width: width, height: 200), options: Self.drawing).height)
@@ -299,6 +304,39 @@ final class NoticeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         text.draw(with: bounds.insetBy(dx: MenuMetrics.inset, dy: 4), options: Self.drawing)
+    }
+}
+
+/// The app's version on the left and how updating is going on the right,
+/// laid out like a provider heading.
+final class AboutView: NSView {
+    private let version: NSAttributedString
+    private let status: NSAttributedString?
+
+    init(status: String?, detail: String?) {
+        version = NSAttributedString(string: "Headroom \(appVersion)", attributes: [
+            .font: NSFont.menuFont(ofSize: 13), .foregroundColor: NSColor.disabledControlTextColor,
+        ])
+        self.status = status.map {
+            NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.tertiaryLabelColor])
+        }
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 22))
+        toolTip = detail
+        // Drawn rather than titled, so VoiceOver needs telling what it says.
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel([version.string, status].compactMap { $0 }.joined(separator: ", "))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let left = version.size()
+        version.draw(at: NSPoint(x: MenuMetrics.inset, y: (bounds.height - left.height) / 2))
+        if let status {
+            let right = status.size()
+            status.draw(at: NSPoint(x: bounds.width - MenuMetrics.inset - right.width, y: (bounds.height - right.height) / 2))
+        }
     }
 }
 
@@ -401,6 +439,12 @@ final class LimitRowView: NSView, Ticking {
             .font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.secondaryLabelColor,
         ])
         reset.draw(at: NSPoint(x: inset, y: 2))
+        if let countdown = Format.countdown(limit.resetsAt, now: now) {
+            let drawn = NSAttributedString(string: countdown, attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor,
+            ])
+            drawn.draw(at: NSPoint(x: bounds.width - inset - drawn.size().width, y: 2))
+        }
     }
 }
 
