@@ -43,6 +43,8 @@ enum StatusIcon {
         var badge: Bool
         /// The percentage after each bar.
         var numbers: Bool
+        /// Counting down what is left, rather than up with what is used.
+        var remaining: Bool
     }
 
     /// A row per provider, but for those that have never had numbers and
@@ -65,7 +67,7 @@ enum StatusIcon {
                 stale: snapshot?.isStale(at: now) ?? true
             )
         }
-        return Spec(rows: rows, badge: chrome.updateReady, numbers: chrome.showNumbers)
+        return Spec(rows: rows, badge: chrome.updateReady, numbers: chrome.showNumbers, remaining: chrome.showRemaining)
     }
 
     static func image(_ spec: Spec) -> NSImage {
@@ -75,7 +77,7 @@ enum StatusIcon {
         let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold)
         let glyphWidth: CGFloat = 9, barWidth: CGFloat = 22, gap: CGFloat = 3, columnGap: CGFloat = 6
         let badgeWidth: CGFloat = spec.badge ? 7 : 0
-        let texts = rows.map { row in row.percent.map { "\(Format.wholePercent($0))" } ?? "–" }
+        let texts = rows.map { row in row.percent.map { "\(Format.wholePercent($0, remaining: spec.remaining))" } ?? "–" }
         let textSizes = texts.map { ($0 as NSString).size(withAttributes: [.font: font]) }
         let perColumn = 2
         // Where each column starts. Numbers are sized to the widest in their
@@ -120,17 +122,17 @@ enum StatusIcon {
 
                 let barHeight: CGFloat = rows.count > 1 ? 5 : 6
                 let track = NSRect(x: x + glyphWidth, y: y + (rowHeight - barHeight) / 2, width: barWidth, height: barHeight)
-                func drawLane(_ lane: NSRect, percent: Double, color: NSColor, dotted: Bool = false) {
-                    drawBar(lane, percent: percent, trackColor: color.withAlphaComponent(0.25 * alpha), fillColor: color.withAlphaComponent(alpha), minFill: 2, dotted: dotted)
+                func drawLane(_ lane: NSRect, percent: Double?, color: NSColor, dotted: Bool = false) {
+                    drawBar(lane, percent: percent, remaining: spec.remaining, trackColor: color.withAlphaComponent(0.25 * alpha), fillColor: color.withAlphaComponent(alpha), minFill: 2, dotted: dotted)
                 }
                 if let weekly = row.weekly {
                     // Stacked: the top limit on the top half, the weekly
                     // limit in a thinner lane below.
                     let laneHeight = track.height / 2
-                    drawLane(NSRect(x: track.minX, y: track.maxY - laneHeight, width: track.width, height: laneHeight), percent: row.percent ?? 0, color: color)
+                    drawLane(NSRect(x: track.minX, y: track.maxY - laneHeight, width: track.width, height: laneHeight), percent: row.percent, color: color)
                     drawLane(NSRect(x: track.minX, y: track.minY, width: track.width, height: laneHeight - 1), percent: weekly.percent, color: ink(Level(percent: weekly.percent)), dotted: weekly.dotted)
                 } else {
-                    drawLane(track, percent: row.percent ?? 0, color: color)
+                    drawLane(track, percent: row.percent, color: color)
                 }
 
                 if spec.numbers {
@@ -151,14 +153,17 @@ enum StatusIcon {
 }
 
 /// A rounded track and its fill, which never shrinks below a visible nub
-/// once anything is used. A dotted fill is a row of short dashes.
-private func drawBar(_ track: NSRect, percent: Double, trackColor: NSColor, fillColor: NSColor, minFill: CGFloat? = nil, dotted: Bool = false) {
+/// while there is any. A dotted fill is a row of short dashes. `percent`
+/// is the share used, filled as what is left when `remaining`, and nil
+/// leaves the track empty.
+private func drawBar(_ track: NSRect, percent: Double?, remaining: Bool, trackColor: NSColor, fillColor: NSColor, minFill: CGFloat? = nil, dotted: Bool = false) {
     let radius = track.height / 2
     trackColor.setFill()
     NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
-    guard percent > 0 else { return }
+    let shown = Format.fill(percent, remaining: remaining)
+    guard shown > 0 else { return }
     var fill = track
-    fill.size.width = max(track.width * percent / 100, minFill ?? track.height)
+    fill.size.width = max(track.width * shown / 100, minFill ?? track.height)
     fillColor.setFill()
     if dotted {
         for x in stride(from: fill.minX, to: fill.maxX, by: 3) {
@@ -181,6 +186,12 @@ enum Preferences {
     static var showNumbers: Bool {
         get { flag("showNumbers") }
         set { UserDefaults.standard.set(newValue, forKey: "showNumbers") }
+    }
+
+    /// Counting down what is left. Off unless switched on.
+    static var showRemaining: Bool {
+        get { UserDefaults.standard.bool(forKey: "showRemaining") }
+        set { UserDefaults.standard.set(newValue, forKey: "showRemaining") }
     }
 
     /// The label of the limit each provider shows in the menu bar icon, by
@@ -212,13 +223,14 @@ struct MenuChrome {
     var canUpdate: Bool
     var showPace: Bool
     var showNumbers: Bool
+    var showRemaining: Bool
     var menuBarLimits: [String: String]
 }
 
 @MainActor
 func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
     var entries: [MenuEntry] = []
-    for group in menuViews(engine: engine, now: now, showPace: chrome.showPace) {
+    for group in menuViews(engine: engine, now: now, showPace: chrome.showPace, remaining: chrome.showRemaining) {
         entries += group.map(MenuEntry.view)
         entries.append(.view(SeparatorView()))
     }
@@ -240,7 +252,7 @@ func menuEntries(engine: Engine, chrome: MenuChrome, now: Date) -> [MenuEntry] {
 /// Everything the menu shows above its actions, one group per provider: a
 /// heading, its limits, and the reason when the last refresh failed.
 @MainActor
-func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
+func menuViews(engine: Engine, now: Date, showPace: Bool, remaining: Bool) -> [[NSView]] {
     engine.providers.map { provider -> [NSView] in
         let state = engine.state(provider)
         let fetching = engine.isFetching(provider)
@@ -248,7 +260,7 @@ func menuViews(engine: Engine, now: Date, showPace: Bool) -> [[NSView]] {
         let detail: HeaderView.Detail = fetching ? .text("Updating…") : state.snapshot.map { .age(since: $0.fetchedAt) } ?? .text("No data")
 
         var views: [NSView] = [HeaderView(name: provider.name, plan: state.snapshot?.plan, detail: detail, now: now, detailIsProblem: stale && !fetching)]
-        views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale, showPace: showPace) }
+        views += (state.snapshot?.limits ?? []).map { LimitRowView(limit: $0, now: now, stale: stale, showPace: showPace, remaining: remaining) }
         if let notice = state.notice(at: now) {
             views.append(NoticeView(text: notice))
         }
@@ -397,12 +409,14 @@ final class LimitRowView: NSView, Ticking {
     var now: Date { didSet { needsDisplay = true } }
     private let stale: Bool
     private let showPace: Bool
+    private let remaining: Bool
 
-    init(limit: Limit, now: Date, stale: Bool, showPace: Bool) {
+    init(limit: Limit, now: Date, stale: Bool, showPace: Bool, remaining: Bool) {
         self.limit = limit
         self.now = now
         self.stale = stale
         self.showPace = showPace
+        self.remaining = remaining
         super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 44))
     }
 
@@ -419,18 +433,19 @@ final class LimitRowView: NSView, Ticking {
         ])
         label.draw(at: NSPoint(x: inset, y: 26))
 
-        let value = NSAttributedString(string: Format.percent(percent), attributes: [
+        let value = NSAttributedString(string: Format.percent(percent, remaining: remaining), attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
             .foregroundColor: stale ? NSColor.secondaryLabelColor : (level.color ?? .labelColor),
         ])
         value.draw(at: NSPoint(x: bounds.width - inset - value.size().width, y: 26))
 
         let track = NSRect(x: inset, y: 18, width: bounds.width - inset * 2, height: 5)
-        drawBar(track, percent: percent, trackColor: NSColor.labelColor.withAlphaComponent(0.12), fillColor: accent.withAlphaComponent(stale ? 0.5 : 1))
-        // Pace tick: how far through the window we are. Fill past the tick
+        drawBar(track, percent: percent, remaining: remaining, trackColor: NSColor.labelColor.withAlphaComponent(0.12), fillColor: accent.withAlphaComponent(stale ? 0.5 : 1))
+        // Pace tick: how far through the window we are, or how much of it
+        // is left. Fill past the tick, or short of it when counting down,
         // means usage is running ahead of the clock.
         if showPace, let elapsed = limit.elapsedFraction(at: now) {
-            let x = track.minX + track.width * elapsed
+            let x = track.minX + track.width * (remaining ? 1 - elapsed : elapsed)
             NSColor.labelColor.withAlphaComponent(0.7).setFill()
             NSRect(x: x - 0.75, y: track.minY - 2, width: 1.5, height: track.height + 4).fill()
         }

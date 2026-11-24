@@ -23,6 +23,12 @@ tick is how far through the window the clock is, so a fill past the tick
 means you are burning faster than the window refills. "Show pace marker" in
 Settings hides the ticks if you would rather not see them.
 
+"Show remaining instead of used" counts down instead: the menu bar, the
+menu, and the iPhone widgets show how much of each limit is left, and the
+tick how much of the window is left, so a fill short of it means you are
+burning faster than the window refills. Rows then turn orange at 25% left
+and red at 10%. The `headroom` command always reports usage.
+
 It does one thing and is simple about it: no dependencies and a short
 Settings window. It borrows the sessions Claude Code, Codex, and the
 Antigravity CLI already have, shows you the numbers, and otherwise stays
@@ -230,7 +236,7 @@ token out from under each other.
 
 The widgets refresh as often as iOS lets them, which is about every 15 to
 30 minutes, and the same rules as on the Mac apply. Between fetches the
-pace ticks keep moving and windows that reset drop to 0% on their own.
+pace ticks keep moving and windows that reset start over on their own.
 Opening the app fetches right away.
 
 To try it in a simulator without signing in, install a debug build there
