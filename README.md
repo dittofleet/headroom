@@ -158,7 +158,7 @@ Code itself. By default headroom only reads it, so while it is expired the
 numbers wait for Claude Code to refresh it.
 
 On a Mac where Claude Code rarely runs, the token would sit expired, so
-you can turn off **Passive mode** in Settings. Headroom then renews it the
+you can turn off Claude's **Passive mode** in Settings. Headroom then renews it the
 same way Claude Code does: the refresh token goes to the same endpoint,
 and the new tokens are stored back in the keychain item (or
 `~/.claude/.credentials.json`) in the same shape, so Claude Code simply
@@ -168,10 +168,13 @@ alone unless the server rejects it, so the two do not rotate the refresh
 token out from under each other. When the refresh token itself has been
 revoked, the menu says to sign in again with `claude login`.
 
-Codex's and the Antigravity CLI's tokens are only ever read. When one
-expires the menu says so, and the numbers come back the next time you use
-that CLI. The Antigravity CLI's lasts only an hour, but its numbers only
-move while you use it, which is when it renews the token.
+The Antigravity CLI's token lasts only an hour. Its Passive mode works the
+same way: turned off, Headroom renews an expired token by running `agy
+models` (from `~/.local/bin`), which spends no quota, and the CLI stores
+the new token itself.
+
+Codex's token is only ever read. When it expires the menu says so, and the
+numbers come back the next time you use Codex.
 
 The keychain is read and written through `/usr/bin/security`, which Claude
 Code's keychain item already trusts, so there is no password prompt.

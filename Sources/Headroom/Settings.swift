@@ -68,9 +68,13 @@ final class SettingsModel: ObservableObject {
         }
     }
 
-    var passiveMode: Bool {
-        get { LoginPreferences.passiveMode }
-        set { LoginPreferences.passiveMode = newValue; changed() }
+    func passiveMode(_ provider: MacProvider) -> Binding<Bool> {
+        Binding {
+            LoginPreferences.isPassive(provider.id)
+        } set: {
+            LoginPreferences.setPassive(provider.id, $0)
+            self.changed()
+        }
     }
 
     func isLoggedIn(_ provider: MacProvider) -> Bool {
@@ -225,44 +229,44 @@ private struct ProviderSettings: View {
     let provider: MacProvider
 
     var body: some View {
+        let usesCLI = model.usesCLICredentials(provider)
         // Some providers can only be borrowed from their CLI.
         if provider.own != nil {
-            let usesCLI = model.usesCLICredentials(provider)
             Picker("Credentials", selection: usesCLI) {
                 Text("Use \(provider.cli) credentials").tag(true)
                 Text("Manage credentials separately").tag(false)
             }
             .pickerStyle(.radioGroup)
+        }
 
-            if model.loggingIn == provider.id {
-                LabeledContent {
-                    Button("Cancel") { model.cancelLogIn() }
-                } label: {
-                    HStack {
-                        ProgressView().controlSize(.small)
-                        Text("Waiting for the browser login")
-                    }
+        if model.loggingIn == provider.id {
+            LabeledContent {
+                Button("Cancel") { model.cancelLogIn() }
+            } label: {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for the browser login")
                 }
-            } else if usesCLI.wrappedValue {
-                if provider.refreshesCLICredentials {
-                    Toggle(isOn: $model.passiveMode) {
-                        Text("Passive mode")
-                        Text("Never refresh \(provider.cli) credentials. While they're expired, the numbers wait for \(provider.cli) to refresh them.")
-                    }
+            }
+        } else if usesCLI.wrappedValue {
+            if provider.refreshesCLICredentials {
+                Toggle(isOn: model.passiveMode(provider)) {
+                    Text("Passive mode")
+                    Text("Never refresh \(provider.cli) credentials. While they're expired, the numbers wait for \(provider.cli) to refresh them.")
                 }
-            } else if model.isLoggedIn(provider) {
-                LabeledContent {
-                    Button("Log Out") { model.logOut(provider) }
-                } label: {
-                    Text("Logged in")
-                    if let email = model.email(provider) { Text(email) }
-                }
-            } else {
-                LabeledContent {
-                    Button("Log In…") { model.logIn(provider) }
-                } label: {
-                    Text("Logged out")
-                }
+            }
+        } else if model.isLoggedIn(provider) {
+            LabeledContent {
+                Button("Log Out") { model.logOut(provider) }
+            } label: {
+                Text("Logged in")
+                if let email = model.email(provider) { Text(email) }
+            }
+        } else {
+            LabeledContent {
+                Button("Log In…") { model.logIn(provider) }
+            } label: {
+                Text("Logged out")
             }
         }
 

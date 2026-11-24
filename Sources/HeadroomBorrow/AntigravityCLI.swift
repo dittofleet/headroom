@@ -1,8 +1,9 @@
 import Foundation
 import HeadroomCore
 
-// The Antigravity CLI's own token, read-only like Codex's. It lasts an hour,
-// but the numbers only move while the CLI runs, which is when it renews it.
+// The Antigravity CLI's own token. It lasts an hour, and the CLI renews it
+// whenever it runs. Outside Passive mode an expired one is renewed by
+// running the CLI, which stores the new token itself.
 
 extension AntigravityProvider {
     /// Where the CLI keeps its token without a keychain: on Linux, and on a
@@ -23,6 +24,20 @@ extension AntigravityProvider {
             .max { ($0.expiresAt ?? .distantPast) < ($1.expiresAt ?? .distantPast) }
     }
 
+    static func isExpired(_ creds: (token: String, expiresAt: Date?)) -> Bool {
+        creds.expiresAt.map { $0 <= Date() } ?? false
+    }
+
+    /// Where the CLI's installer puts it.
+    static let executable = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/agy")
+
+    /// Its cheapest command that signs in: listing the models renews and
+    /// stores the token without spending any quota. Without its log, which
+    /// would otherwise gain a file every time.
+    static func renew() async {
+        _ = await Subprocess.run(executable.path, ["--log-file", "/dev/null", "models"], timeout: 30)
+    }
+
     /// The CLI's JSON, which the keychain item holds as go-keyring's base64.
     static func parseCredentials(_ data: Data) -> (token: String, expiresAt: Date?)? {
         let stored = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -37,20 +52,26 @@ extension AntigravityProvider {
 
 extension AntigravityProvider: Provider {
     public func fetch() async -> Result<Snapshot, FetchFailure> {
-        guard let creds = await Self.credentials() else {
+        guard var creds = await Self.credentials() else {
             return .failure(FetchFailure("Not signed in to the Antigravity CLI"))
         }
         let expired = FetchFailure("Login expired, refreshes when the Antigravity CLI next runs")
-        // A guaranteed 401, so not sent.
-        if let expiresAt = creds.expiresAt, expiresAt <= Date() {
-            return .failure(expired)
+        let passive = LoginPreferences.isPassive(id)
+        if Self.isExpired(creds), !passive {
+            await Self.renew()
+            creds = await Self.credentials() ?? creds
         }
-        async let plan = PlanLookup.shared.plan(for: id, token: creds.token) { token in
+        // A guaranteed 401, so not sent.
+        if Self.isExpired(creds) {
+            return .failure(passive ? expired : FetchFailure("Login expired and `agy` couldn't renew it, run `agy` to sign in again"))
+        }
+        let token = creds.token
+        async let plan = PlanLookup.shared.plan(for: id, token: token) { token in
             guard case .success(let data) = await HTTP.post(Self.accountEndpoint, json: Self.accountRequest, headers: Self.headers(token: token), authHint: "") else { return nil }
             return Self.parsePlan(data)
         }
         let body: Data
-        switch await HTTP.post(Self.endpoint, json: [:], headers: Self.headers(token: creds.token), authHint: expired.message) {
+        switch await HTTP.post(Self.endpoint, json: [:], headers: Self.headers(token: token), authHint: expired.message) {
         case .success(let data): body = data
         case .failure(let failure): return .failure(failure)
         }
