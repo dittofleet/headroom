@@ -23,10 +23,19 @@ public enum LoginPreferences {
         set { defaults.set(Array(newValue), forKey: "ownLogins") }
     }
 
-    /// CLI credentials are only read, never refreshed and written back.
-    /// While they are expired, the numbers wait for the CLI to refresh them.
-    public static var passiveMode: Bool {
-        get { defaults.object(forKey: "passiveMode") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "passiveMode") }
+    /// The CLI's credentials are only read, never refreshed. While they are
+    /// expired, the numbers wait for the CLI to refresh them.
+    public static func isPassive(_ id: String) -> Bool {
+        !refreshing.contains(id)
+    }
+
+    public static func setPassive(_ id: String, _ passive: Bool) {
+        if passive { refreshing.remove(id) } else { refreshing.insert(id) }
+    }
+
+    /// The providers whose CLI credentials Headroom refreshes.
+    private static var refreshing: Set<String> {
+        get { Set(defaults.stringArray(forKey: "refreshesCLICredentials") ?? []) }
+        set { defaults.set(Array(newValue), forKey: "refreshesCLICredentials") }
     }
 }

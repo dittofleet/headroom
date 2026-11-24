@@ -163,7 +163,7 @@ actor TokenRenewer {
         let leftToClaudeCode = FetchFailure("Token expired, refreshes when Claude Code next runs")
         // Passive mode only reads, which still picks up Claude Code's own
         // renewal.
-        if LoginPreferences.passiveMode {
+        if LoginPreferences.isPassive(ClaudeProvider().id) {
             if let current = await Self.renewedSince(creds) { return .success(current) }
             return .failure(creds.isLive(at: Date()) ? rejected : leftToClaudeCode)
         }
@@ -190,7 +190,7 @@ actor TokenRenewer {
         if let current = await Self.renewedSince(creds) { return .success(current) }
         // Switched on while this waited. Past here the refresh token is spent,
         // and only the write keeps Claude Code signed in.
-        if LoginPreferences.passiveMode {
+        if LoginPreferences.isPassive(ClaudeProvider().id) {
             return .failure(leftToClaudeCode)
         }
 

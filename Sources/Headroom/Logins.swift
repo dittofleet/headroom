@@ -8,7 +8,7 @@ import HeadroomBorrow
 let appProviders: [MacProvider] = [
     MacProvider(borrowed: ClaudeProvider(), cli: "Claude Code CLI", refreshesCLICredentials: true, own: ClaudeAccountProvider(store: accountStore)),
     MacProvider(borrowed: CodexProvider(), cli: "Codex CLI", refreshesCLICredentials: false, own: CodexAccountProvider(store: accountStore)),
-    MacProvider(borrowed: AntigravityProvider(), cli: "Antigravity CLI", refreshesCLICredentials: false, own: nil),
+    MacProvider(borrowed: AntigravityProvider(), cli: "Antigravity CLI", refreshesCLICredentials: true, own: nil),
 ]
 
 /// Headroom's own logins, for a provider not using its CLI's credentials.
